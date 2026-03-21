@@ -1,0 +1,29 @@
+name: Backend Deploy
+on:
+  push:
+    branches: [ main ]
+    paths: [ 'backend/**' ]
+
+permissions:
+  contents: 'read'
+  id-token: 'write'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: 'auth'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: 'github-actions-sa@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com'
+
+      - name: 'Deploy to Cloud Run'
+        uses: 'google-github-actions/deploy-cloudrun@v2'
+        with:
+          service: 'hello-backend-dev'
+          region: 'us-central1'
+          source: './backend'
+          env_vars_file: 'backend/env.dev.yaml'
