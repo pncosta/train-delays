@@ -35,3 +35,52 @@ Enable APIs:
 
 `gcloud run deploy <service-name> --source . --region us-central1  --allow-unauthenticated --env-vars-file <env.xxx.yaml>`
 
+### Github actions
+
+#### Setup
+
+get gcp project number
+
+ `PROJECT_NUMBER=$(gcloud projects describe $(gcloud config get-value project) --format="value(projectNumber)")`
+
+
+create pool
+
+`gcloud iam workload-identity-pools create "github-pool" --location="global" --display-name="GitHub Pool"`
+
+create service account 
+
+`gcloud iam service-accounts create github-actions-sa \
+    --display-name="GitHub Actions Service Account"`
+
+handshake:
+
+`gcloud iam workload-identity-pools providers create-oidc "github-provider" \
+  --location="global" \
+  --workload-identity-pool="github-pool" \
+  --display-name="GitHub Provider" \
+  --issuer-uri="https://token.actions.githubusercontent.com" \
+  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.repository_owner=assertion.repository_owner" \
+  --attribute-condition="assertion.repository_owner == '<GITHUB_USER>'"`
+
+  add permissions
+
+  ```
+
+  # Give it permission to manage Cloud Run
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:github-actions-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
+    --role="roles/run.admin"
+
+# Give it permission to act as a user (needed to deploy)
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:github-actions-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
+    --role="roles/iam.serviceAccountUser"
+
+# Give it permission to push images to the registry
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:github-actions-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
+    --role="roles/artifactregistry.admin"
+
+```
+
