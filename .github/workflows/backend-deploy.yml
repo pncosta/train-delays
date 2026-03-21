@@ -3,7 +3,12 @@ on:
   push:
     branches: [ main ]
     paths: [ 'backend/**' ]
-
+  workflow_dispatch: 
+    inputs:
+      reason:
+        description: 'Why are we deploying?'
+        required: false
+        default: 'Regular update'
 permissions:
   contents: 'read'
   id-token: 'write'
