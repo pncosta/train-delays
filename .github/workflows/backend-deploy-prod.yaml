@@ -1,0 +1,32 @@
+name: Backend PROD (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Why are we deploying?'
+        required: false
+        default: 'Regular update'
+
+permissions:
+  contents: 'read'
+  id-token: 'write'
+
+jobs:
+  deploy-prod:
+    runs-on: ubuntu-latest
+    environment: production 
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: 'github-actions-sa@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com'
+
+      - name: Deploy to Prod
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: hello-backend # No "-dev" suffix
+          region: us-central1
+          source: ./backend
+          env_vars_file: ./backend/env.prod.yaml
