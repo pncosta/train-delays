@@ -1,14 +1,15 @@
-name: Backend Deploy
+name: Backend Deploy (DEV)
 on:
-  push:
-    branches: [ main ]
-    paths: [ 'backend/**' ]
   workflow_dispatch: 
     inputs:
       reason:
         description: 'Why are we deploying?'
         required: false
         default: 'Regular update'
+  push:
+    branches: [ main ]
+    paths: [ 'backend/**' ]
+
 permissions:
   contents: 'read'
   id-token: 'write'
@@ -18,11 +19,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Create Env File from Secret
         run: |
-          echo "${{ secrets.BACKEND_ENV_DEV }}" > backend/env.dev.yaml
-      
+          echo "${{ secrets.BACKEND_ENV_DEV }}" > backend/env.yaml     
       - id: 'auth'
         uses: 'google-github-actions/auth@v2'
         with:
@@ -35,4 +34,4 @@ jobs:
           service: 'hello-backend-dev'
           region: 'us-central1'
           source: './backend'
-          env_vars_file: 'backend/env.dev.yaml'
+          env_vars_file: 'backend/env.yaml'
