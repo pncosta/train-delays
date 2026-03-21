@@ -14,6 +14,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Create Env File from Secret
+        run: |
+          echo "${{ secrets.BACKEND_ENV_DEV }}" > backend/env.dev.yaml
+      
       - id: 'auth'
         uses: 'google-github-actions/auth@v2'
         with:
@@ -26,4 +30,4 @@ jobs:
           service: 'hello-backend-dev'
           region: 'us-central1'
           source: './backend'
-          env_vars_file: './backend/env.dev.yaml'
+          env_vars_file: 'backend/env.dev.yaml'
