@@ -15,7 +15,7 @@ func main() {
 		}
 
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		fmt.Fprintf(w, "Hello! I am running in: %s", env)
+		fmt.Fprintf(w, "Hello Delays! I am running in: %s", env)
 	})
 
 	// Cloud Run provides the PORT variable automatically
