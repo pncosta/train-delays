@@ -30,6 +30,6 @@ jobs:
         uses: 'google-github-actions/deploy-cloudrun@v2'
         with:
           service: 'backend-prod'
-          region: 'europe-southwest1
+          region: 'europe-southwest1'
           source: './backend'
           env_vars_file: 'backend/env.yaml'
