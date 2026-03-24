@@ -12,7 +12,7 @@ func foobarGetName(ctx context.Context, cpClient CPClient) error {
 
 	stations, _ := cpClient.FetchStations(ctx)
 
-	date := "2026-03-24" // TODO
+	date := "2026-03-23" // TODO
 
 	for _, station := range stations {
 
@@ -28,6 +28,9 @@ func foobarGetName(ctx context.Context, cpClient CPClient) error {
 		fmt.Printf("Found %d (from %d) trains that finish in station %s)\n", len(filteredTrains), len(trains.Trips), station)
 
 		err = storeTrips(date, filteredTrains)
+		if err != nil {
+			fmt.Printf("error saving trips: %v", err)
+		}
 
 	}
 

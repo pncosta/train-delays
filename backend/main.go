@@ -8,27 +8,29 @@ import (
 )
 
 func main() {
-	http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
-		// Check for an environment variable
-		env := os.Getenv("APP_ENV")
-		if env == "" {
-			env = "local-dev"
-		}
+	// Read Env
+	dbPath := os.Getenv("DB_PATH")
 
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		fmt.Fprintf(w, "Hello Delays! I am running in: %s", env)
-	})
+	env := os.Getenv("APP_ENV")
+	if env == "" {
+		env = "local-dev"
+	}
 
-	// Cloud Run provides the PORT variable automatically
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 
+	http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
+
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		fmt.Fprintf(w, "Hello! I am running in: %s dbpath %s", env, dbPath)
+	})
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	fmt.Printf("Starting...\n")
+	fmt.Printf("Starting...%s\n", dbPath)
 
 	// TODO: Read from ENV
 	cpClient := NewCPClient(

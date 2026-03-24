@@ -14,7 +14,7 @@ func InitDB() error {
 	// Default to local file, but override in Cloud Run to "/data/trains.db"
 	dbPath := os.Getenv("DB_PATH")
 	if dbPath == "" {
-		dbPath = "./data/trains_local.db"
+		dbPath = "./data/trips.db"
 	}
 
 	fmt.Printf("Initing DB in %s\n", dbPath)
