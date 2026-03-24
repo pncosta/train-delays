@@ -1,2 +1,5 @@
 # env files
-**/env.*.yaml
+**/env*.yaml
+
+# db files
+**/*.db

@@ -21,6 +21,10 @@ func main() {
 		port = "8080"
 	}
 
+	cpApiKey := os.Getenv("CP_API_KEY")
+	cpClientID := os.Getenv("CP_CLIENT_ID")
+	cpClientSecret := os.Getenv("CP_CLIENT_ID")
+
 	http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -32,12 +36,9 @@ func main() {
 
 	fmt.Printf("Starting...%s\n", dbPath)
 
-	// TODO: Read from ENV
 	cpClient := NewCPClient(
 		"https://api-gateway.cp.pt/cp/services/travel-api/stations",
-		"ca3923e4-1d3c-424f-a3d0-9554cf3ef859",
-		"1483ea620b920be6328dcf89e808937a",
-		"74bd06d5a2715c64c2f848c5cdb56e6b",
+		cpApiKey, cpClientID, cpClientSecret,
 	)
 
 	err := InitDB()
