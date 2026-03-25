@@ -22,28 +22,9 @@ func newDBClient(dbUrl string, dbToken string) *DBClient {
 	}
 }
 
-func (c *DBClient) Connect() (*sql.DB, error) {
-
-	db, err := sql.Open("libsql", c.dbConnectUrl)
-
-	fmt.Println(c.dbConnectUrl)
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
-
-	// Test the connection immediately
-	if err := db.Ping(); err != nil {
-		return nil, err
-	}
-
-	return db, nil
-}
-
 func (c *DBClient) InitDB() error {
 	var err error
 	db, err := sql.Open("libsql", c.dbConnectUrl)
-	fmt.Println(c.dbConnectUrl)
 
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
@@ -73,51 +54,29 @@ func (c *DBClient) InitDB() error {
 	return err
 }
 
-// inserts multiple trips in the DB
-// opens a new connection and transaction and commits and closes the conectiion in the end
+// inserts multiple trips in the DB with the same db connection
 func (c *DBClient) InsertTrips(date string, trips []Trip, filter func(s Trip) bool) error {
 	db, err := sql.Open("libsql", c.dbConnectUrl)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
-	// _, _ = db.Exec("PRAGMA journal_mode = MEMORY;")
-	// _, _ = db.Exec("PRAGMA synchronous = OFF;")
-	// _, _ = db.Exec("PRAGMA busy_timeout = 5000;")
 
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if tx != nil {
-			tx.Rollback()
-		}
-		db.Close()
-	}()
+	defer db.Close()
 
 	for _, trip := range trips {
 		if filter(trip) {
-			err = InsertTrip(tx, date, trip)
+			err = InsertTrip(db, date, trip)
 			if err != nil {
 				return err
 			}
 		}
 	}
-	err = tx.Commit()
-	if err != nil {
-		return err
-	}
-	//	 Force FUSE to write file
-	if f, ok := db.Driver().(interface{ Sync() error }); ok {
-		f.Sync()
-	}
-	tx = nil
 	return nil
 }
 
 // InsertTrip inserts one single Trip in the DB
 // pass in a *sql.Tx so batch inserts can be done under same transaction
-func InsertTrip(tx *sql.Tx, date string, trip Trip) error {
+func InsertTrip(db *sql.DB, date string, trip Trip) error {
 	delay := 0
 	if trip.Delay != nil {
 		delay = *trip.Delay
@@ -135,10 +94,11 @@ func InsertTrip(tx *sql.Tx, date string, trip Trip) error {
 		ON CONFLICT(id) DO UPDATE SET
 			updated_at = CURRENT_TIMESTAMP,
 			actual_arrival = excluded.actual_arrival,
+			actual_departure = excluded.actual_departure,
 			delay_minutes = excluded.delay_minutes,
 			is_cancelled = excluded.is_cancelled;`
 
-	_, err := tx.Exec(query, uid, trip.TrainNumber, trip.TrainService.Code,
+	_, err := db.Exec(query, uid, trip.TrainNumber, trip.TrainService.Code,
 		trip.TrainOrigin.Code, trip.TrainDestination.Code,
 		trip.DepartureTime, trip.ETD,
 		trip.ArrivalTime, trip.ETA, delay, cancelled)

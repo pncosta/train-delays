@@ -18,23 +18,18 @@ type Env struct {
 	cpClientSecret string
 	dbUrl          string
 	dbToken        string
-	dbPath         string
 }
 
 func main() {
 	// Read Env
 	env := readEnv()
-	log.Printf("Starting service...%s\n", env.dbPath)
+	log.Printf("Starting service...\n")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	dbClient := newDBClient(env.dbUrl, env.dbToken)
-	_, err := dbClient.Connect()
-	if err != nil {
-		log.Printf("error connecting to DB: %v\n", err)
-	}
-	err = dbClient.InitDB()
+	err := dbClient.InitDB()
 	if err != nil {
 		log.Printf("error initing DB: %v\n", err)
 	}
@@ -45,7 +40,7 @@ func main() {
 
 	http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		fmt.Fprintf(w, "Hello! I am running in: %s dbpath %s", env.env, env.dbPath)
+		fmt.Fprintf(w, "Hello! I am running in: %s", env.env)
 	})
 
 	fmt.Printf("Server starting on port %s...\n", env.port)
@@ -119,7 +114,6 @@ func readEnv() Env {
 	}
 
 	return Env{
-		dbPath:         dbPath, // old db delete
 		dbUrl:          dbUrl,
 		dbToken:        dbToken,
 		env:            env,
