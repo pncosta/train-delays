@@ -22,7 +22,7 @@ type Env struct {
 func main() {
 	// Read Env
 	env := readEnv()
-	fmt.Printf("Starting service...%s\n", env.dbPath)
+	log.Printf("Starting service...%s\n", env.dbPath)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -30,7 +30,7 @@ func main() {
 	dbClient := newDBClient(env.dbPath)
 	err := dbClient.InitDB()
 	if err != nil {
-		fmt.Printf("error initing DB: %v\n", err)
+		log.Printf("error initing DB: %v\n", err)
 	}
 
 	cpClient := NewCPClient(env.cpBaseUrl, env.cpApiKey, env.cpClientID, env.cpClientSecret)
@@ -44,7 +44,7 @@ func main() {
 
 	fmt.Printf("Server starting on port %s...\n", env.port)
 	if err := http.ListenAndServe(":"+env.port, nil); err != nil {
-		fmt.Printf("Error starting server: %s\n", err)
+		log.Printf("Error starting server: %s\n", err)
 	}
 }
 
@@ -52,7 +52,7 @@ func main() {
 func triggerScrapper(ctx context.Context, cpClient *CPClient, dbClient *DBClient) {
 	ticker := time.NewTicker(5 * time.Minute)
 	go func() {
-		log.Println("🚀 Background worker started...")
+		log.Println("Background worker started...")
 		err := getAndStoreTrips(ctx, cpClient, dbClient)
 		if err != nil {
 			fmt.Printf("error getting delays: %v\n", err)
@@ -62,7 +62,7 @@ func triggerScrapper(ctx context.Context, cpClient *CPClient, dbClient *DBClient
 			case <-ticker.C:
 				err := getAndStoreTrips(ctx, cpClient, dbClient)
 				if err != nil {
-					fmt.Printf("error getting delays: %v\n", err)
+					log.Printf("error getting delays: %v\n", err)
 				}
 			}
 		}

@@ -30,13 +30,10 @@ func getAndStoreTrips(ctx context.Context, cpClient *CPClient, dbClient *DBClien
 			if !strings.HasPrefix(t.TrainDestination.Code, station.Code) {
 				return false
 			}
-			// below  means trip finishes in current station
 
-			// in that case we want to check trips that already finished or are finishing soonish
+			// check trips that already finished or are finishing soon (in the next few minutes)
+			// first use ETA, if ETA is nil use  ArrivalTime
 			// TODO - check what happens at midnight - even CP API is weird with dates so gotta understand what happens end of the day
-			// first check ETA with now - if ETA is past or close about to happen, return true
-			// if ETA is nil, check arrival time with same logic of ETA
-			// else, return true (either both are nil (weird, but happens) or both are too much in the future  so we ignore)
 			soonish := time.Now().Add(10 * time.Minute)
 
 			if t.ETA != nil {
@@ -57,7 +54,7 @@ func getAndStoreTrips(ctx context.Context, cpClient *CPClient, dbClient *DBClien
 				}
 			}
 
-			// either ETA and arrival are nil OR both are too much in the future - return false
+			// either ETA and arrivaltime are nil OR both are too much in the future and trip can be igored
 			return false
 
 		}
@@ -71,27 +68,3 @@ func getAndStoreTrips(ctx context.Context, cpClient *CPClient, dbClient *DBClien
 
 	return nil
 }
-
-//  { check this train : will delay be kept?
-//     "trainNumber": 529,
-//     "trainService": {
-//         "code": "IC",
-//         "designation": "Intercidades"
-//     },
-//     "trainOrigin": {
-//         "code": "94-30007",
-//         "designation": "Lisboa Santa Apolonia"
-//     },
-//     "trainDestination": {
-//         "code": "94-2006",
-//         "designation": "Porto Campanha"
-//     },
-//     "arrivalTime": "01:13",
-//     "departureTime": null,
-//     "platform": "5",
-//     "delay": 20,
-//     "occupancy": null,
-//     "supression": null,
-//     "ETA": "01:33",
-//     "ETD": null
-// },

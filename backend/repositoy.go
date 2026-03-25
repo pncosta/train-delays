@@ -59,6 +59,8 @@ func (c *DBClient) InitDB() error {
 	return err
 }
 
+// inserts multiple trips in the DB
+// opens a new connection and transaction and commits and closes the conectiion in the end
 func (c *DBClient) InsertTrips(date string, trips []Trip, filter func(s Trip) bool) error {
 	db, err := sql.Open("sqlite", c.dbPath)
 	if err != nil {
@@ -107,7 +109,7 @@ func InsertTrip(tx *sql.Tx, date string, trip Trip) error {
 		delay = *trip.Delay
 	}
 
-	cancelled := false // TODO
+	cancelled := false // TODO: handled cancelled
 	uid := fmt.Sprintf("%s-%d", date, trip.TrainNumber)
 	query := `
 		INSERT INTO trips (id, train_number, service_type, origin_station, 
