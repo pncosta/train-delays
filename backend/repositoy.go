@@ -3,20 +3,13 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"os"
 
 	_ "modernc.org/sqlite" // Pure Go driver
 )
 
 var db *sql.DB
 
-func InitDB() error {
-	// Default to local file, but override in Cloud Run to "/data/trains.db"
-	dbPath := os.Getenv("DB_PATH")
-	if dbPath == "" {
-		dbPath = "./data/trips.db"
-	}
-
+func InitDB(dbPath string) error {
 	fmt.Printf("Initing DB in %s\n", dbPath)
 
 	var err error

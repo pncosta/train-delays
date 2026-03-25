@@ -6,26 +6,22 @@ import (
 	"strings"
 )
 
-// 1 - Get all arrivals from all stations
-// 2 - Store all those arrivals (and metadata) in DB
-func foobarGetName(ctx context.Context, cpClient CPClient) error {
-
+// 1 - Get list of relevant train stations
+// 2 - for each one, gets all the trips that finish in that station
+// 3 - Store all those trips
+func getAndStoreTrips(ctx context.Context, cpClient CPClient, date string) error {
 	stations, _ := cpClient.FetchStations(ctx)
 
-	date := "2026-03-23" // TODO
-
 	for _, station := range stations {
-
 		trains, err := cpClient.FetchTimetable(ctx, station.Code, date)
 		if err != nil {
-			fmt.Printf("Error: %v\n", err)
 			return err
 		}
 
 		filterDestinationOnly := func(s Trip) bool { return strings.HasPrefix(s.TrainDestination.Code, station.Code) }
 		filteredTrains := filter(trains.Trips, filterDestinationOnly)
 
-		fmt.Printf("Found %d (from %d) trains that finish in station %s)\n", len(filteredTrains), len(trains.Trips), station)
+		fmt.Printf("%s - Found %d (from %d) trains that finish in station %s)\n", date, len(filteredTrains), len(trains.Trips), station)
 
 		err = storeTrips(date, filteredTrains)
 		if err != nil {
