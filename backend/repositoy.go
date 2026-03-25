@@ -3,20 +3,32 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"log"
 
 	_ "modernc.org/sqlite" // Pure Go driver
 )
 
-var db *sql.DB
+type DBClient struct {
+	dbPath string
+}
 
-func InitDB(dbPath string) error {
-	fmt.Printf("Initing DB in %s\n", dbPath)
+func newDBClient(dbPath string) *DBClient {
+	return &DBClient{
+		dbPath: dbPath,
+	}
+}
+
+func (c *DBClient) InitDB() error {
+	fmt.Printf("Initing DB in %s\n", c.dbPath)
 
 	var err error
-	db, err = sql.Open("sqlite", dbPath)
+	db, err := sql.Open("sqlite", c.dbPath)
+
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
+
+	defer db.Close()
 
 	// set SQLite to use memory for its journal (no .db-journal file created)
 	_, err = db.Exec("PRAGMA journal_mode=MEMORY;")
@@ -48,10 +60,50 @@ func InitDB(dbPath string) error {
 	return err
 }
 
-// SaveSingleArrival does the work for just one train.
-// It requires a transaction (*sql.Tx) to be passed in.
-func SaveTrip(tx *sql.Tx, date string, trip Trip) error {
+func (c *DBClient) InsertTrips(date string, trips []Trip, filter func(s Trip) bool) error {
+	db, err := sql.Open("sqlite", c.dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	_, _ = db.Exec("PRAGMA journal_mode = MEMORY;")
+	_, _ = db.Exec("PRAGMA synchronous = OFF;")
+	_, _ = db.Exec("PRAGMA busy_timeout = 5000;")
 
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if tx != nil {
+			tx.Rollback()
+		}
+		log.Printf("closing connection\n")
+		db.Close()
+	}()
+
+	for _, trip := range trips {
+		if filter(trip) {
+			err = InsertTrip(tx, date, trip)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+	//	 Force FUSE to write file
+	if f, ok := db.Driver().(interface{ Sync() error }); ok {
+		f.Sync()
+	}
+	tx = nil
+	return nil
+}
+
+// InsertTrip inserts one single Trip in the DB
+// pass in a *sql.Tx so batch inserts can be done under same transaction
+func InsertTrip(tx *sql.Tx, date string, trip Trip) error {
 	delay := 0
 	if trip.Delay != nil {
 		delay = *trip.Delay
@@ -59,7 +111,7 @@ func SaveTrip(tx *sql.Tx, date string, trip Trip) error {
 
 	cancelled := false // TODO
 	uid := fmt.Sprintf("%s-%d", date, trip.TrainNumber)
-
+	fmt.Printf("writing %s - %d %s %s %v %v %d\n", uid, trip.TrainNumber, trip.TrainOrigin.Code, trip.TrainDestination.Code, trip.ArrivalTime, trip.ETA, delay)
 	query := `
 		INSERT INTO trips (id, train_number, service_type, origin_station, 
 			destination_station, scheduled_arrival, actual_arrival, 
@@ -71,7 +123,7 @@ func SaveTrip(tx *sql.Tx, date string, trip Trip) error {
 			is_cancelled = excluded.is_cancelled;`
 
 	_, err := tx.Exec(query, uid, trip.TrainNumber, trip.TrainService.Code,
-		trip.TrainOrigin.Designation, trip.TrainDestination.Designation,
+		trip.TrainOrigin.Code, trip.TrainDestination.Code,
 		trip.ArrivalTime, trip.ETA, delay, cancelled)
 
 	return err
