@@ -10,13 +10,15 @@ import (
 )
 
 type Env struct {
-	dbPath         string
 	env            string
 	port           string
 	cpBaseUrl      string
 	cpApiKey       string
 	cpClientID     string
 	cpClientSecret string
+	dbUrl          string
+	dbToken        string
+	dbPath         string
 }
 
 func main() {
@@ -27,8 +29,12 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	dbClient := newDBClient(env.dbPath)
-	err := dbClient.InitDB()
+	dbClient := newDBClient(env.dbUrl, env.dbToken)
+	_, err := dbClient.Connect()
+	if err != nil {
+		log.Printf("error connecting to DB: %v\n", err)
+	}
+	err = dbClient.InitDB()
 	if err != nil {
 		log.Printf("error initing DB: %v\n", err)
 	}
@@ -102,8 +108,20 @@ func readEnv() Env {
 		panic("missing CP_CLIENT_SECRET")
 	}
 
+	dbUrl := os.Getenv("TURSO_DB_URL")
+	if dbUrl == "" {
+		panic("missing TURSO_DB_URL")
+	}
+
+	dbToken := os.Getenv("TURSO_DB_TOKEN")
+	if dbToken == "" {
+		panic("missing TURSO_DB_TOKEN")
+	}
+
 	return Env{
-		dbPath:         dbPath,
+		dbPath:         dbPath, // old db delete
+		dbUrl:          dbUrl,
+		dbToken:        dbToken,
 		env:            env,
 		port:           port,
 		cpBaseUrl:      cpBaseUrl,

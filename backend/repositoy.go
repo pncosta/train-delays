@@ -4,24 +4,46 @@ import (
 	"database/sql"
 	"fmt"
 
-	_ "modernc.org/sqlite" // Pure Go driver
+	// _ "modernc.org/sqlite" // Pure Go driver
+	_ "github.com/tursodatabase/libsql-client-go/libsql" // New driver
 )
 
 type DBClient struct {
-	dbPath string
+	dbUrl        string
+	dbConnectUrl string
+	dbToken      string
 }
 
-func newDBClient(dbPath string) *DBClient {
+func newDBClient(dbUrl string, dbToken string) *DBClient {
 	return &DBClient{
-		dbPath: dbPath,
+		dbUrl:        dbUrl,
+		dbToken:      dbToken,
+		dbConnectUrl: fmt.Sprintf("%s?authToken=%s", dbUrl, dbToken),
 	}
 }
 
-func (c *DBClient) InitDB() error {
-	fmt.Printf("Initing DB in %s\n", c.dbPath)
+func (c *DBClient) Connect() (*sql.DB, error) {
 
+	db, err := sql.Open("libsql", c.dbConnectUrl)
+
+	fmt.Println(c.dbConnectUrl)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	// Test the connection immediately
+	if err := db.Ping(); err != nil {
+		return nil, err
+	}
+
+	return db, nil
+}
+
+func (c *DBClient) InitDB() error {
 	var err error
-	db, err := sql.Open("sqlite", c.dbPath)
+	db, err := sql.Open("libsql", c.dbConnectUrl)
+	fmt.Println(c.dbConnectUrl)
 
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
@@ -29,17 +51,6 @@ func (c *DBClient) InitDB() error {
 
 	defer db.Close()
 
-	// set SQLite to use memory for its journal (no .db-journal file created)
-	_, err = db.Exec("PRAGMA journal_mode=MEMORY;")
-	if err != nil {
-		return err
-	}
-
-	// Reduce the "synchronous" level to be more FUSE-friendly
-	_, err = db.Exec("PRAGMA synchronous=OFF;")
-	if err != nil {
-		return err
-	}
 	// Create the schema if it doesn't exist
 	schema := `
 	CREATE TABLE IF NOT EXISTS trips (
@@ -48,11 +59,14 @@ func (c *DBClient) InitDB() error {
 		service_type TEXT,
 		origin_station TEXT,
 		destination_station TEXT,
+		scheduled_departure TEXT,
 		scheduled_arrival TEXT,
+		actual_departure TEXT,
 		actual_arrival TEXT,
 		delay_minutes INTEGER,
 		is_cancelled BOOLEAN,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);`
 
 	_, err = db.Exec(schema)
@@ -62,13 +76,13 @@ func (c *DBClient) InitDB() error {
 // inserts multiple trips in the DB
 // opens a new connection and transaction and commits and closes the conectiion in the end
 func (c *DBClient) InsertTrips(date string, trips []Trip, filter func(s Trip) bool) error {
-	db, err := sql.Open("sqlite", c.dbPath)
+	db, err := sql.Open("libsql", c.dbConnectUrl)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
-	_, _ = db.Exec("PRAGMA journal_mode = MEMORY;")
-	_, _ = db.Exec("PRAGMA synchronous = OFF;")
-	_, _ = db.Exec("PRAGMA busy_timeout = 5000;")
+	// _, _ = db.Exec("PRAGMA journal_mode = MEMORY;")
+	// _, _ = db.Exec("PRAGMA synchronous = OFF;")
+	// _, _ = db.Exec("PRAGMA busy_timeout = 5000;")
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -112,17 +126,21 @@ func InsertTrip(tx *sql.Tx, date string, trip Trip) error {
 	cancelled := trip.Supression != nil
 	uid := fmt.Sprintf("%s-%d", date, trip.TrainNumber)
 	query := `
-		INSERT INTO trips (id, train_number, service_type, origin_station, 
-			destination_station, scheduled_arrival, actual_arrival, 
-			delay_minutes, is_cancelled)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO trips (id, train_number, service_type, 
+			origin_station, destination_station,  
+			scheduled_departure, actual_departure,  
+			scheduled_arrival, actual_arrival, 
+			delay_minutes, is_cancelled, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(id) DO UPDATE SET
+			updated_at = CURRENT_TIMESTAMP,
 			actual_arrival = excluded.actual_arrival,
 			delay_minutes = excluded.delay_minutes,
 			is_cancelled = excluded.is_cancelled;`
 
 	_, err := tx.Exec(query, uid, trip.TrainNumber, trip.TrainService.Code,
 		trip.TrainOrigin.Code, trip.TrainDestination.Code,
+		trip.DepartureTime, trip.ETD,
 		trip.ArrivalTime, trip.ETA, delay, cancelled)
 
 	return err
