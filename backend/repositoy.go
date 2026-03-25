@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"log"
 
 	_ "modernc.org/sqlite" // Pure Go driver
 )
@@ -77,7 +76,6 @@ func (c *DBClient) InsertTrips(date string, trips []Trip, filter func(s Trip) bo
 		if tx != nil {
 			tx.Rollback()
 		}
-		log.Printf("closing connection\n")
 		db.Close()
 	}()
 
@@ -111,7 +109,6 @@ func InsertTrip(tx *sql.Tx, date string, trip Trip) error {
 
 	cancelled := false // TODO
 	uid := fmt.Sprintf("%s-%d", date, trip.TrainNumber)
-	fmt.Printf("writing %s - %d %s %s %v %v %d\n", uid, trip.TrainNumber, trip.TrainOrigin.Code, trip.TrainDestination.Code, trip.ArrivalTime, trip.ETA, delay)
 	query := `
 		INSERT INTO trips (id, train_number, service_type, origin_station, 
 			destination_station, scheduled_arrival, actual_arrival, 

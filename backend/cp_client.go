@@ -129,7 +129,7 @@ func (c *CPClient) FetchStations(_ context.Context) ([]StationInfo, error) {
 		{Designation: "Entroncamento", Code: "94-34009"},
 		{Designation: "Abrantes", Code: "94-52001"},
 		{Designation: "Coimbra-B", Code: "94-36004"},
-		{Designation: "Tomar", Code: "94-40154"}, // Branch of the Norte line
+		{Designation: "Tomar", Code: "94-40154"},
 
 		// west
 		{Designation: "Caldas da Rainha", Code: "94-63008"},
@@ -137,7 +137,7 @@ func (c *CPClient) FetchStations(_ context.Context) ([]StationInfo, error) {
 		{Designation: "Leiria", Code: "94-63560"},
 
 		// Beiras
-		{Designation: "Vilar Formoso", Code: "94-49460"}, // Border crossing to Salamanca
+		{Designation: "Vilar Formoso", Code: "94-49460"},
 		{Designation: "Castelo Branco", Code: "94-53009"},
 		{Designation: "Guarda", Code: "94-49007"},
 		{Designation: "Covilhã", Code: "94-54007"},
