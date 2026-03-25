@@ -109,7 +109,7 @@ func InsertTrip(tx *sql.Tx, date string, trip Trip) error {
 		delay = *trip.Delay
 	}
 
-	cancelled := false // TODO: handled cancelled
+	cancelled := trip.Supression != nil
 	uid := fmt.Sprintf("%s-%d", date, trip.TrainNumber)
 	query := `
 		INSERT INTO trips (id, train_number, service_type, origin_station, 
