@@ -8,9 +8,9 @@ on:
         default: 'Regular update'
   push:
     branches: [ main ]
-paths: 
-      - 'backend/web-server/**'
-      - 'backend/scraper/**'
+  paths: 
+    - 'backend/web-server/**'
+    - 'backend/scraper/**'
 
 permissions:
   contents: 'read'
@@ -50,4 +50,3 @@ jobs:
             --region europe-west1 \
             --env-vars-file backend/env.yaml \
             --quiet
-            
