@@ -1,4 +1,4 @@
-name: Backend Deploy (DEV)
+name: Deploy (DEV)
 on:
   workflow_dispatch: 
     inputs:
@@ -8,7 +8,9 @@ on:
         default: 'Regular update'
   push:
     branches: [ main ]
-    paths: [ 'backend/web-server/**' ]
+paths: 
+      - 'backend/web-server/**'
+      - 'backend/scraper/**'
 
 permissions:
   contents: 'read'
@@ -29,10 +31,23 @@ jobs:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
           service_account: 'github-actions-sa@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com'
 
-      - name: 'Deploy to Cloud Run'
+      # Deploy Web Server
+      - name: 'Deploy Web Server (Dev)'
+        if: contains(github.event.head_commit.modified, 'backend/web-server/') || github.event_name == 'workflow_dispatch'
         uses: 'google-github-actions/deploy-cloudrun@v2'
         with:
           service: 'backend-dev'
           region: 'europe-southwest1'
           source: './backend/web-server'
           env_vars_file: 'backend/env.yaml'
+      
+      # Deploy Scraper (Job)
+      - name: 'Deploy Scraper Job'
+        if: contains(github.event.head_commit.modified, 'backend/scraper/') || github.event_name == 'workflow_dispatch'
+        run: |
+          gcloud run jobs deploy scraper-job-dev \
+            --source ./backend/scraper \
+            --region europe-west1 \
+            --env-vars-file backend/env.yaml \
+            --quiet
+            
