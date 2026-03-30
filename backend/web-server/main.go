@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -20,22 +21,29 @@ type Env struct {
 
 func main() {
 
-	// Read Env
 	env := readEnv()
 	log.Printf("Starting service...\n")
 
-	http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		fmt.Fprintf(w, "Hello! I am running : %s", env.env)
-	})
+	ctx := context.Background()
 
-	fmt.Printf("Server starting on port %s...\n", env.port)
-	if err := http.ListenAndServe(":"+env.port, nil); err != nil {
-		log.Printf("Error starting server: %s\n", err)
+	mux, err := setupHandlers(ctx, env)
+	if err != nil {
+		log.Panic(err)
 	}
+
+	err = http.ListenAndServe(":"+env.port, mux)
+	if err != nil {
+		fmt.Println(err)
+	}
+
 }
 
-// triggerScrapper initializes and runs periodic tasks
+func setupHandlers(ctx context.Context, env Env) (*http.ServeMux, error) {
+	h := &Handler{}
+	mux := &http.ServeMux{}
+	mux.HandleFunc("GET /api/stats/summary", h.handleSummary(ctx, ""))
+	return mux, nil
+}
 
 func readEnv() Env {
 	env := os.Getenv("APP_ENV")

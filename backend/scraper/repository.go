@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 
-	// _ "modernc.org/sqlite" // Pure Go driver
 	_ "github.com/tursodatabase/libsql-client-go/libsql" // New driver
 )
 
