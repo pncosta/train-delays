@@ -2,6 +2,14 @@ name: Backend Deploy (PROD)
 on:
   workflow_dispatch: 
     inputs:
+      deploy_web:
+        description: 'Deploy Web Server?'
+        type: boolean
+        default: true
+      deploy_scraper:
+        description: 'Deploy Scraper Job?'
+        type: boolean
+        default: true
       reason:
         description: 'Why are we deploying?'
         required: false
@@ -26,10 +34,20 @@ jobs:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
           service_account: 'github-actions-sa@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com'
 
-      - name: 'Deploy to Cloud Run'
+      - name: 'Deploy Web Server (PROD)'
+        if: ${{ github.event.inputs.deploy_web == 'true' }}
         uses: 'google-github-actions/deploy-cloudrun@v2'
         with:
           service: 'backend-prod'
           region: 'europe-southwest1'
           source: './backend/web-server'
           env_vars_file: 'backend/env.yaml'
+      
+      - name: 'Deploy Scraper Job (PROD)'
+        if: ${{ github.event.inputs.deploy_scraper == 'true' }}
+        run: |
+          gcloud run jobs deploy scraper-job-prod \
+            --source ./backend/scraper \
+            --region europe-southwest1 \
+            --env-vars-file backend/env.yaml \
+            --quiet

@@ -17,8 +17,8 @@ type Env struct {
 }
 
 func main() {
-	log.Println("Starting scraper...")
 	env := readEnv()
+	log.Printf("Starting scraper on %s...\n", env.env)
 	ctx := context.Background()
 
 	dbClient := NewDBClient(env.dbUrl, env.dbToken)
@@ -35,7 +35,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	log.Println("scrape finished successfully")
+	log.Printf("scrape finished successfully - %s\n", env.env)
 	os.Exit(0)
 }
 
@@ -43,11 +43,6 @@ func readEnv() Env {
 	env := os.Getenv("APP_ENV")
 	if env == "" {
 		env = "local-dev"
-	}
-
-	dbPath := os.Getenv("DB_PATH")
-	if dbPath == "" {
-		dbPath = "./data/trips.db"
 	}
 
 	cpBaseUrl := "https://api-gateway.cp.pt"
