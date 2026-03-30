@@ -15,7 +15,14 @@ import (
 // (CP only keeps the delay info for a random(?) number of hours before it is removed, so we try to get the latest trains that just finished)
 // 3 - Upsert all those trips in DB
 func getAndStoreTrips(ctx context.Context, cpClient *CPClient, dbClient *DBClient) error {
-	oneHourAgo := time.Now().Add(-1 * time.Hour)
+
+	// Set location to lisbon - needed to have correct input for CP API
+	lisbon, err := time.LoadLocation("Europe/Lisbon")
+	if err != nil {
+		fmt.Printf("error loading time location: %v", err)
+	}
+
+	oneHourAgo := time.Now().In(lisbon).Add(-1 * time.Hour)
 	stations, _ := cpClient.FetchStations(ctx)
 	log.Printf("Getting trips since %v\n", oneHourAgo)
 

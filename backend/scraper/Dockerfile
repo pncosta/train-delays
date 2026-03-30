@@ -14,6 +14,7 @@ RUN go build -o main .
 
 # Run
 FROM alpine:latest
+RUN apk add --no-cache tzdata
 WORKDIR /root/
 COPY --from=builder /app/main .
 # Use the PORT environment variable
