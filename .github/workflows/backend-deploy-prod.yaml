@@ -48,6 +48,6 @@ jobs:
         run: |
           gcloud run jobs deploy scraper-job-prod \
             --source ./backend/scraper \
-            --region europe-southwest1 \
+            --region europe-west1 \
             --env-vars-file backend/env.yaml \
             --quiet
