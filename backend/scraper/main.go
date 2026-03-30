@@ -2,16 +2,12 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
-	"net/http"
 	"os"
-	"time"
 )
 
 type Env struct {
 	env            string
-	port           string
 	cpBaseUrl      string
 	cpApiKey       string
 	cpClientID     string
@@ -21,14 +17,11 @@ type Env struct {
 }
 
 func main() {
-	// Read Env
+	log.Println("Starting scraper...")
 	env := readEnv()
-	log.Printf("Starting service...\n")
+	ctx := context.Background()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	dbClient := newDBClient(env.dbUrl, env.dbToken)
+	dbClient := NewDBClient(env.dbUrl, env.dbToken)
 	err := dbClient.InitDB()
 	if err != nil {
 		log.Printf("error initing DB: %v\n", err)
@@ -36,38 +29,14 @@ func main() {
 
 	cpClient := NewCPClient(env.cpBaseUrl, env.cpApiKey, env.cpClientID, env.cpClientSecret)
 
-	triggerScrapper(ctx, cpClient, dbClient)
-
-	http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		fmt.Fprintf(w, "Hello! I am running in: %s", env.env)
-	})
-
-	fmt.Printf("Server starting on port %s...\n", env.port)
-	if err := http.ListenAndServe(":"+env.port, nil); err != nil {
-		log.Printf("Error starting server: %s\n", err)
+	err = getAndStoreTrips(ctx, cpClient, dbClient)
+	if err != nil {
+		log.Printf("scraper failed: %v", err)
+		os.Exit(1)
 	}
-}
 
-// triggerScrapper initializes and runs periodic tasks
-func triggerScrapper(ctx context.Context, cpClient *CPClient, dbClient *DBClient) {
-	ticker := time.NewTicker(5 * time.Minute)
-	go func() {
-		log.Println("Background worker started...")
-		err := getAndStoreTrips(ctx, cpClient, dbClient)
-		if err != nil {
-			fmt.Printf("error getting delays: %v\n", err)
-		}
-		for {
-			select {
-			case <-ticker.C:
-				err := getAndStoreTrips(ctx, cpClient, dbClient)
-				if err != nil {
-					log.Printf("error getting delays: %v\n", err)
-				}
-			}
-		}
-	}()
+	log.Println("scrape finished successfully")
+	os.Exit(0)
 }
 
 func readEnv() Env {
@@ -79,11 +48,6 @@ func readEnv() Env {
 	dbPath := os.Getenv("DB_PATH")
 	if dbPath == "" {
 		dbPath = "./data/trips.db"
-	}
-
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
 	}
 
 	cpBaseUrl := "https://api-gateway.cp.pt"
@@ -114,14 +78,12 @@ func readEnv() Env {
 	}
 
 	return Env{
+		env:            env,
 		dbUrl:          dbUrl,
 		dbToken:        dbToken,
-		env:            env,
-		port:           port,
 		cpBaseUrl:      cpBaseUrl,
 		cpApiKey:       cpApiKey,
 		cpClientID:     cpClientID,
 		cpClientSecret: cpClientSecret,
 	}
-
 }

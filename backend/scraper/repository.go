@@ -14,7 +14,7 @@ type DBClient struct {
 	dbToken      string
 }
 
-func newDBClient(dbUrl string, dbToken string) *DBClient {
+func NewDBClient(dbUrl string, dbToken string) *DBClient {
 	return &DBClient{
 		dbUrl:        dbUrl,
 		dbToken:      dbToken,

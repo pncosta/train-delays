@@ -1,10 +1,18 @@
-# Stage 1: Build the binary
+# Build 
 FROM golang:1.25.0-alpine AS builder
+
+# Allow HTTPS connections
+RUN apk add --no-cache ca-certificates
 WORKDIR /app
+
+# go dependencies   
+COPY go.mod go.sum ./
+RUN go mod download
+
 COPY . .
 RUN go build -o main .
 
-# Stage 2: Run the binary in a tiny image
+# Run
 FROM alpine:latest
 WORKDIR /root/
 COPY --from=builder /app/main .

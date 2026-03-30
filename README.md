@@ -1,10 +1,23 @@
-This is a WIP project to track delays and ponctuality of the portuguese trains.
+This is a WIP project that aims to track the ponctuality, delays and supressions of the portuguese trains from CP company.
 
-
-
-
+It is build in go and is composed of:
+- periodid job that scrapes the CP API to get the delays of each train travel and store it on a DB
+- server to get the data
+- web app to visualise the data 
 
 ## Run
+
+### Env Vars
+
+The following env vars are expected either on the scraper or web server:
+
+```
+CP_API_KEY: - API key from CP
+CP_CLIENT_ID: - client ID from CP
+CP_CLIENT_SECRET: client secret from CP 
+TURSO_DB_URL: URL from sql DB
+TURSO_DB_TOKEN: long live token to access the DB
+```
 
 ### Locally with go
 
@@ -12,21 +25,29 @@ Simply do the obvious `go run .`
 
 ### Locally with Docker
 
-build `docker build -t hello-go .`
-and run `docker run -p 8080:8080 --env-file env.local.env hello-go`
 
-in both cases open `http://localhost:8080/hello` to check is running
+build `docker build -t <name> .`
+and run `docker run -p 8080:8080 --env-file env/env.local.env <name>`
+
 
 ## Deploy
 
 ### gcloud run
 
+to deploy from machine directly to gcloud:
+
+server:
+
 gcloud run deploy backend-dev \
   --source . \
   --region=europe-southwest1 \
-  --env-vars-file env.dev.yaml
+  --env-vars-file ../env/env.dev.yaml
 
-
+job:
+gcloud run jobs deploy scraper-job-dev \
+  --source . \
+  --region=europe-west1 \
+  --env-vars-file ../env/env.dev.yaml
 
 
 ### Github actions
@@ -35,23 +56,7 @@ deployment to prod is manually via gh actions
 
 ### DB
 
-data is being scrapped daily and stored on a SQLite DB kept in a gcp  bucket
-
-in order to setup on GCP:
-
-1  - create bucket:
-
-```
-gcloud storage buckets create gs://pt-train-delays-db --location=europe-southwest1
-```
-
-2 - mount bucket to service:
-```
-gcloud run services update backend-dev \
-  --region=europe-southwest1 \
-  --add-volume=name=db-volume,type=cloud-storage,bucket=pt-train-delays-db-dev \
-  --add-volume-mount=volume=db-volume,mount-path=/data
-  ```
+[Turso](https://turso.tech/) is being used as provider for a SQL DB
 
 
 

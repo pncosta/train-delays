@@ -8,7 +8,7 @@ on:
         default: 'Regular update'
   push:
     branches: [ main ]
-    paths: [ 'backend/**' ]
+    paths: [ 'backend/web-server/**' ]
 
 permissions:
   contents: 'read'
@@ -34,5 +34,5 @@ jobs:
         with:
           service: 'backend-dev'
           region: 'europe-southwest1'
-          source: './backend'
+          source: './backend/web-server'
           env_vars_file: 'backend/env.yaml'

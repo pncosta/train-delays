@@ -31,5 +31,5 @@ jobs:
         with:
           service: 'backend-prod'
           region: 'europe-southwest1'
-          source: './backend'
+          source: './backend/web-server'
           env_vars_file: 'backend/env.yaml'
