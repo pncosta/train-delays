@@ -23,6 +23,7 @@ func getAndStoreTrips(ctx context.Context, cpClient *CPClient, dbClient *DBClien
 	}
 
 	oneHourAgo := time.Now().In(lisbon).Add(-1 * time.Hour)
+	day := oneHourAgo.Format("2006-01-02")
 	stations, _ := cpClient.FetchStations(ctx)
 	log.Printf("Getting trips since %v\n", oneHourAgo)
 
@@ -32,7 +33,29 @@ func getAndStoreTrips(ctx context.Context, cpClient *CPClient, dbClient *DBClien
 			return err
 		}
 
-		filterTrips := func(t Trip) bool {
+		// Filter out trips that START in current station - from those we want to store the staring time
+		startingTrips := Filter(trips, func(t Trip) bool {
+			if !strings.HasPrefix(t.TrainOrigin.Code, station.Code) {
+				return false
+			}
+			if t.DepartureTime != nil {
+				soonish := time.Now().Add(10 * time.Minute)
+				// Create a new time with departure time from trip and adding current day
+				departure, _ := time.ParseInLocation("2006-01-02 15:04", time.Now().Format("2006-01-02")+" "+*t.DepartureTime, time.Now().Location())
+				if soonish.After(departure) {
+					// trip is finished or about to finish - store already
+					return true
+				}
+			}
+			return true
+		})
+
+		err = dbClient.InsertStartingTrips(day, startingTrips)
+		if err != nil {
+			fmt.Printf("error saving trips: %v", err)
+		}
+
+		endingTrips := Filter(trips, func(t Trip) bool {
 			// trip doesnt end in current station - filter out
 			if !strings.HasPrefix(t.TrainDestination.Code, station.Code) {
 				return false
@@ -63,10 +86,8 @@ func getAndStoreTrips(ctx context.Context, cpClient *CPClient, dbClient *DBClien
 
 			// either ETA and arrivaltime are nil OR both are too much in the future and trip can be igored
 			return false
-
-		}
-		day := oneHourAgo.Format("2006-01-02")
-		err = dbClient.InsertTrips(day, trips, filterTrips)
+		})
+		err = dbClient.InsertEndingTrips(day, endingTrips)
 		if err != nil {
 			fmt.Printf("error saving trips: %v", err)
 		}
