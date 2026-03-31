@@ -22,7 +22,8 @@ func getAndStoreTrips(ctx context.Context, cpClient *CPClient, dbClient *DBClien
 		fmt.Printf("error loading time location: %v", err)
 	}
 
-	oneHourAgo := time.Now().In(lisbon).Add(-1 * time.Hour)
+	now := time.Now().In(lisbon)
+	oneHourAgo := now.Add(-1 * time.Hour)
 	day := oneHourAgo.Format("2006-01-02")
 	stations, _ := cpClient.FetchStations(ctx)
 	log.Printf("Getting trips since %v\n", oneHourAgo)
@@ -39,9 +40,9 @@ func getAndStoreTrips(ctx context.Context, cpClient *CPClient, dbClient *DBClien
 				return false
 			}
 			if t.DepartureTime != nil {
-				soonish := time.Now().Add(10 * time.Minute)
+				soonish := now.Add(10 * time.Minute)
 				// Create a new time with departure time from trip and adding current day
-				departure, _ := time.ParseInLocation("2006-01-02 15:04", time.Now().Format("2006-01-02")+" "+*t.DepartureTime, time.Now().Location())
+				departure, _ := time.ParseInLocation("2006-01-02 15:04", now.Format("2006-01-02")+" "+*t.DepartureTime, now.Location())
 				if soonish.After(departure) {
 					// trip is finished or about to finish - store already
 					return true
@@ -64,11 +65,11 @@ func getAndStoreTrips(ctx context.Context, cpClient *CPClient, dbClient *DBClien
 			// check trips that already finished or are finishing soon (in the next few minutes)
 			// first use ETA, if ETA is nil use  ArrivalTime
 			// TODO - check what happens at midnight - even CP API is weird with dates so gotta understand what happens end of the day
-			soonish := time.Now().Add(10 * time.Minute)
+			soonish := now.Add(10 * time.Minute)
 
 			if t.ETA != nil {
 				// Create a new time with ETA from trip and adding current day
-				eta, _ := time.ParseInLocation("2006-01-02 15:04", time.Now().Format("2006-01-02")+" "+*t.ETA, time.Now().Location())
+				eta, _ := time.ParseInLocation("2006-01-02 15:04", now.Format("2006-01-02")+" "+*t.ETA, now.Location())
 				if soonish.After(eta) {
 					// trip is finished or about to finish - store already
 					return true
@@ -77,7 +78,7 @@ func getAndStoreTrips(ctx context.Context, cpClient *CPClient, dbClient *DBClien
 
 			if t.ArrivalTime != nil {
 				// Create a new time with ETA from trip and adding current day
-				eta, _ := time.ParseInLocation("2006-01-02 15:04", time.Now().Format("2006-01-02")+" "+*t.ArrivalTime, time.Now().Location())
+				eta, _ := time.ParseInLocation("2006-01-02 15:04", now.Format("2006-01-02")+" "+*t.ArrivalTime, now.Location())
 				if soonish.After(eta) {
 					// trip is finished or about to finish - store already
 					return true
