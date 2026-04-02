@@ -44,11 +44,11 @@ func getAndStoreTrips(ctx context.Context, cpClient *CPClient, dbClient *DBClien
 				// Create a new time with departure time from trip and adding current day
 				departure, _ := time.ParseInLocation("2006-01-02 15:04", now.Format("2006-01-02")+" "+*t.DepartureTime, now.Location())
 				if soonish.After(departure) {
-					// trip is finished or about to finish - store already
+					// trip has started, or ir about to start or about to finish - store already
 					return true
 				}
 			}
-			return true
+			return false
 		})
 
 		err = dbClient.InsertStartingTrips(day, startingTrips)
