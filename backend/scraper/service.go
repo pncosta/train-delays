@@ -68,9 +68,6 @@ func filterStartingTrips(trips []Trip, now time.Time, originStation string) []Tr
 
 			windowStart := now.Add(-1 * 30 * time.Minute)
 			windowEnd := now.Add(15 * time.Minute)
-
-			fmt.Print("windowStart:", windowStart, " windowEnd:", windowEnd, " departure:", departure, "\n")
-
 			if departure.After(windowStart) && departure.Before(windowEnd) {
 				return true
 			}
@@ -89,23 +86,28 @@ func filterEndingTrips(trips []Trip, now time.Time, destinationStation string) [
 
 		// check trips that already finished or are finishing soon (in the next few minutes)
 		// first use ETA, if ETA is nil use  ArrivalTime
-		// TODO - check what happens at midnight - even CP API is weird with dates so gotta understand what happens end of the day
-		soonish := now.Add(10 * time.Minute)
+		// TODO - check what happens at midnight and if it is relevant or not
+		windowStart := now.Add(-1 * 30 * time.Minute)
+		windowEnd := now.Add(15 * time.Minute)
 
 		if t.ETA != nil {
 			// Create a new time with ETA from trip and adding current day
-			eta, _ := time.ParseInLocation("2006-01-02 15:04", now.Format("2006-01-02")+" "+*t.ETA, now.Location())
-			if soonish.After(eta) {
-				// trip is finished or about to finish - store already
+			eta, err := time.ParseInLocation("2006-01-02 15:04", now.Format("2006-01-02")+" "+*t.ETA, now.Location())
+			if err != nil {
+				return false
+			}
+			if eta.After(windowStart) && eta.Before(windowEnd) {
 				return true
 			}
 		}
 
 		if t.ArrivalTime != nil {
 			// Create a new time with ETA from trip and adding current day
-			eta, _ := time.ParseInLocation("2006-01-02 15:04", now.Format("2006-01-02")+" "+*t.ArrivalTime, now.Location())
-			if soonish.After(eta) {
-				// trip is finished or about to finish - store already
+			eta, err := time.ParseInLocation("2006-01-02 15:04", now.Format("2006-01-02")+" "+*t.ArrivalTime, now.Location())
+			if err != nil {
+				return false
+			}
+			if eta.After(windowStart) && eta.Before(windowEnd) {
 				return true
 			}
 		}
