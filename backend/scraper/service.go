@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 )
@@ -19,8 +18,7 @@ var (
 // (CP only keeps the delay info for a random(?) number of hours before it is removed, so we try to get the latest trains that just finished)
 // 3 - Upsert all those trips in DB
 func getAndStoreTrips(ctx context.Context, cpClient *CPClient, dbClient *DBClient) error {
-
-	// Set location to lisbon - needed to have correct input for CP API
+	// Set location to lisbon - needed to have correct hour input for CP API
 	lisbon, err := time.LoadLocation("Europe/Lisbon")
 	if err != nil {
 		fmt.Printf("error loading time location: %v", err)
@@ -30,8 +28,6 @@ func getAndStoreTrips(ctx context.Context, cpClient *CPClient, dbClient *DBClien
 	oneHourAgo := nowLisbon.Add(-1 * time.Hour)
 	day := oneHourAgo.Format("2006-01-02")
 	stations, _ := cpClient.FetchStations(ctx)
-	log.Printf("Now in Lisbon: %v- %v -  Getting trips since %v\n", day, nowLisbon, oneHourAgo)
-	fmt.Printf("Lisbon: %v - %v -  Getting trips since %v\n", day, nowLisbon, oneHourAgo)
 	for _, station := range stations {
 		trips, err := cpClient.FetchTrips(ctx, station.Code, oneHourAgo)
 		if err != nil {
@@ -44,6 +40,7 @@ func getAndStoreTrips(ctx context.Context, cpClient *CPClient, dbClient *DBClien
 			fmt.Printf("error saving trips: %v", err)
 		}
 
+		// Filter out trips that END in current station - from those we want to store all the other data
 		endingTrips := filterEndingTrips(trips, nowLisbon, station.Code)
 		err = dbClient.InsertEndingTrips(day, endingTrips)
 		if err != nil {
@@ -54,17 +51,12 @@ func getAndStoreTrips(ctx context.Context, cpClient *CPClient, dbClient *DBClien
 	return nil
 }
 
+// filters out trip that start in the given originStation
+// and whose departing hour was few minutes ago or in the next minutes
 func filterStartingTrips(trips []Trip, now time.Time, originStation string) []Trip {
-	if strings.Contains(originStation, "94-1008") {
-		log.Printf("Trips for station 1008 : %d \n", len(trips))
-	}
 	startingTrips := Filter(trips, func(t Trip) bool {
 		if !strings.HasPrefix(t.TrainOrigin.Code, originStation) {
 			return false
-		}
-
-		if t.TrainNumber == 15527 {
-			log.Printf("Trip departure time: %v etd %v \n", t.DepartureTime, t.ETD)
 		}
 
 		if t.DepartureTime != nil {
@@ -75,9 +67,6 @@ func filterStartingTrips(trips []Trip, now time.Time, originStation string) []Tr
 
 			windowStart := now.Add(-1 * 30 * time.Minute)
 			windowEnd := now.Add(15 * time.Minute)
-			if t.TrainNumber == 15527 {
-				log.Printf("is %v between %v and %v = %t \n", departure, windowStart, windowEnd, departure.After(windowStart) && departure.Before(windowEnd))
-			}
 			if departure.After(windowStart) && departure.Before(windowEnd) {
 				return true
 			}
@@ -87,15 +76,14 @@ func filterStartingTrips(trips []Trip, now time.Time, originStation string) []Tr
 	return startingTrips
 }
 
+// filters out trip that end in the given destinationStation
+// and whose arrival hour was few minutes ago or in the next minutes
 func filterEndingTrips(trips []Trip, now time.Time, destinationStation string) []Trip {
 	startingTrips := Filter(trips, func(t Trip) bool {
-		// trip doesnt end in current station - filter out
 		if !strings.HasPrefix(t.TrainDestination.Code, destinationStation) {
 			return false
 		}
 
-		// check trips that already finished or are finishing soon (in the next few minutes)
-		// first use ETA, if ETA is nil use  ArrivalTime
 		// TODO - check what happens at midnight and if it is relevant or not
 		windowStart := now.Add(-1 * 30 * time.Minute)
 		windowEnd := now.Add(15 * time.Minute)
