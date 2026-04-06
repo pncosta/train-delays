@@ -30,8 +30,8 @@ func getAndStoreTrips(ctx context.Context, cpClient *CPClient, dbClient *DBClien
 	oneHourAgo := nowLisbon.Add(-1 * time.Hour)
 	day := oneHourAgo.Format("2006-01-02")
 	stations, _ := cpClient.FetchStations(ctx)
-	log.Printf("Now in Lisbon: %v -  Getting trips since %v\n", nowLisbon, oneHourAgo)
-
+	log.Printf("Now in Lisbon: %v- %v -  Getting trips since %v\n", day, nowLisbon, oneHourAgo)
+	fmt.Printf("Lisbon: %v - %v -  Getting trips since %v\n", day, nowLisbon, oneHourAgo)
 	for _, station := range stations {
 		trips, err := cpClient.FetchTrips(ctx, station.Code, oneHourAgo)
 		if err != nil {
@@ -55,7 +55,7 @@ func getAndStoreTrips(ctx context.Context, cpClient *CPClient, dbClient *DBClien
 }
 
 func filterStartingTrips(trips []Trip, now time.Time, originStation string) []Trip {
-	if originStation == "94-1008" {
+	if strings.Contains(originStation, "94-1008") {
 		log.Printf("Trips for station 1008 : %d \n", len(trips))
 	}
 	startingTrips := Filter(trips, func(t Trip) bool {
@@ -64,7 +64,7 @@ func filterStartingTrips(trips []Trip, now time.Time, originStation string) []Tr
 		}
 
 		if t.TrainNumber == 15527 {
-			log.Printf("Trip 15527 departure time: %v etd %v \n", t.DepartureTime, t.ETD)
+			log.Printf("Trip departure time: %v etd %v \n", t.DepartureTime, t.ETD)
 		}
 
 		if t.DepartureTime != nil {

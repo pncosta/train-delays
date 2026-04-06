@@ -2,6 +2,14 @@ name: Deploy (DEV)
 on:
   workflow_dispatch: 
     inputs:
+      deploy_web:
+        description: 'Deploy Web Server?'
+        type: boolean
+        default: true
+      deploy_scraper:
+        description: 'Deploy Scraper Job?'
+        type: boolean
+        default: true
       reason:
         description: 'Why are we deploying?'
         required: false
