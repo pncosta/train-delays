@@ -31,11 +31,24 @@ func main() {
 		log.Panic(err)
 	}
 
-	err = http.ListenAndServe(":"+env.port, mux)
+	err = http.ListenAndServe(":"+env.port, withCORS(mux))
 	if err != nil {
 		fmt.Println(err)
 	}
 
+}
+
+func withCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.Method == "OPTIONS" {
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func setupHandlers(ctx context.Context, env Env) (*http.ServeMux, error) {
