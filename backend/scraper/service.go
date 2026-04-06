@@ -30,14 +30,13 @@ func getAndStoreTrips(ctx context.Context, cpClient *CPClient, dbClient *DBClien
 	oneHourAgo := nowLisbon.Add(-1 * time.Hour)
 	day := oneHourAgo.Format("2006-01-02")
 	stations, _ := cpClient.FetchStations(ctx)
-	log.Printf("Getting trips since %v\n", oneHourAgo)
+	log.Printf("Now in Lisbon: %v -  Getting trips since %v\n", nowLisbon, oneHourAgo)
 
 	for _, station := range stations {
 		trips, err := cpClient.FetchTrips(ctx, station.Code, oneHourAgo)
 		if err != nil {
 			return err
 		}
-
 		// Filter out trips that START in current station - from those we want to store the staring time
 		startingTrips := filterStartingTrips(trips, nowLisbon, station.Code)
 		err = dbClient.InsertStartingTrips(day, startingTrips)
@@ -56,10 +55,18 @@ func getAndStoreTrips(ctx context.Context, cpClient *CPClient, dbClient *DBClien
 }
 
 func filterStartingTrips(trips []Trip, now time.Time, originStation string) []Trip {
+	if originStation == "94-1008" {
+		log.Printf("Trips for station 1008 : %d \n", len(trips))
+	}
 	startingTrips := Filter(trips, func(t Trip) bool {
 		if !strings.HasPrefix(t.TrainOrigin.Code, originStation) {
 			return false
 		}
+
+		if t.TrainNumber == 15527 {
+			log.Printf("Trip 15527 departure time: %v etd %v \n", t.DepartureTime, t.ETD)
+		}
+
 		if t.DepartureTime != nil {
 			departure, err := time.ParseInLocation("2006-01-02 15:04", now.Format("2006-01-02")+" "+*t.DepartureTime, now.Location())
 			if err != nil {
@@ -68,6 +75,9 @@ func filterStartingTrips(trips []Trip, now time.Time, originStation string) []Tr
 
 			windowStart := now.Add(-1 * 30 * time.Minute)
 			windowEnd := now.Add(15 * time.Minute)
+			if t.TrainNumber == 15527 {
+				log.Printf("is %v between %v and %v = %t \n", departure, windowStart, windowEnd, departure.After(windowStart) && departure.Before(windowEnd))
+			}
 			if departure.After(windowStart) && departure.Before(windowEnd) {
 				return true
 			}
