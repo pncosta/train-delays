@@ -9,14 +9,10 @@ import (
 )
 
 type Env struct {
-	env            string
-	port           string
-	cpBaseUrl      string
-	cpApiKey       string
-	cpClientID     string
-	cpClientSecret string
-	dbUrl          string
-	dbToken        string
+	env     string
+	port    string
+	dbUrl   string
+	dbToken string
 }
 
 func main() {
@@ -26,7 +22,13 @@ func main() {
 
 	ctx := context.Background()
 
-	mux, err := setupHandlers(ctx, env)
+	dbClient := NewDBClient(env.dbUrl, env.dbToken)
+	err := dbClient.InitDB()
+	if err != nil {
+		log.Printf("error connecting to DB %v\n", err)
+	}
+
+	mux, err := setupHandlers(ctx, env, dbClient)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -51,10 +53,12 @@ func withCORS(next http.Handler) http.Handler {
 	})
 }
 
-func setupHandlers(ctx context.Context, env Env) (*http.ServeMux, error) {
+func setupHandlers(ctx context.Context, env Env, dbClient *DBClient) (*http.ServeMux, error) {
 	h := &Handler{}
 	mux := &http.ServeMux{}
-	mux.HandleFunc("GET /api/stats/summary", h.handleSummary(ctx, ""))
+	mux.HandleFunc("GET /api/stats/summary", h.handleSummary(ctx, "", dbClient))
+	mux.HandleFunc("GET /api/stats/worst", h.handleWorstDelays(ctx, "", dbClient))
+	mux.HandleFunc("GET /api/stats/worst-average", h.handleWorstAverageDelays(ctx, "", dbClient))
 	return mux, nil
 }
 
@@ -69,9 +73,21 @@ func readEnv() Env {
 		port = "8080"
 	}
 
+	dbUrl := os.Getenv("TURSO_DB_URL")
+	if dbUrl == "" {
+		panic("missing TURSO_DB_URL")
+	}
+
+	dbToken := os.Getenv("TURSO_DB_TOKEN")
+	if dbToken == "" {
+		panic("missing TURSO_DB_TOKEN")
+	}
+
 	return Env{
-		env:  env,
-		port: port,
+		env:     env,
+		port:    port,
+		dbUrl:   dbUrl,
+		dbToken: dbToken,
 	}
 
 }
