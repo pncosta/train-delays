@@ -8,16 +8,8 @@ class ApiService {
 
   const ApiService({this.baseUrl = "http://127.0.0.1:8080"});
 
-  Future<Summary> getSummary({int days = 7, String? serviceType}) async {
-    final Map<String, String> queryParams = {
-      'days': days.toString(),
-    };
-    if (serviceType != null && serviceType.isNotEmpty) {
-      queryParams['service_type'] = serviceType;
-    }
-
-    final uri = Uri.parse('$baseUrl/api/stats/summary').replace(
-        queryParameters: queryParams);
+  Future<Summary> getSummary() async {
+    final uri = Uri.parse('$baseUrl/api/stats/summary');
 
     final response = await http.get(uri);
     if (response.statusCode >= 300) {

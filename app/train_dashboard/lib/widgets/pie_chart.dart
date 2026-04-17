@@ -60,11 +60,11 @@ class PieChart2State extends State<PieChartTrainStatus> {
             mainAxisAlignment: MainAxisAlignment.end,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Indicator(color: Colors.green, text: 'A tempo', isSquare: true),
+              Indicator(color: Colors.greenAccent, text: 'A tempo', isSquare: true),
               SizedBox(height: 4),
-              Indicator(color: Colors.yellow, text: 'Atrasado', isSquare: true),
+              Indicator(color: Colors.yellowAccent, text: 'Atrasado', isSquare: true),
               SizedBox(height: 4),
-              Indicator(color: Colors.red, text: 'Cancelado', isSquare: true),
+              Indicator(color: Colors.redAccent, text: 'Cancelado', isSquare: true),
               SizedBox(height: 18),
             ],
           ),
@@ -82,7 +82,7 @@ class PieChart2State extends State<PieChartTrainStatus> {
       const shadows = [Shadow(color: Colors.black, blurRadius: 2)];
       return switch (i) {
         0 => PieChartSectionData(
-          color: Colors.green,
+          color: Colors.greenAccent,
           value: widget.onTime,
           title: isTouched ? widget.onTime.toString() : '',
           radius: radius,
@@ -94,7 +94,7 @@ class PieChart2State extends State<PieChartTrainStatus> {
           ),
         ),
         1 => PieChartSectionData(
-          color: Colors.yellow,
+          color: Colors.yellowAccent,
           value: widget.delayed,
           title: isTouched ? widget.delayed.toString() : '',
           radius: radius,
@@ -106,7 +106,7 @@ class PieChart2State extends State<PieChartTrainStatus> {
           ),
         ),
         2 => PieChartSectionData(
-          color: Colors.red,
+          color: Colors.redAccent,
           value: widget.cancelled,
           title: isTouched ?  widget.cancelled.toString() : '',
           radius: radius,

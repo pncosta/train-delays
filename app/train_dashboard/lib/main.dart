@@ -3,6 +3,8 @@ import 'package:train_dashboard/pages/dashboard.dart';
 import 'package:train_dashboard/pages/info_dialog.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'consts.dart';
+
 void main() {
   runApp(MaterialApp(home: const MainApp()));
 }
@@ -14,10 +16,10 @@ class MainApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.green,
+        backgroundColor: Consts.cpBgColor,
         title: const Text(
           'Estatisticas dos Comboios de Portugal',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: Colors.white, fontSize: 20.0),
         ),
         actions: <Widget>[
           IconButton(
