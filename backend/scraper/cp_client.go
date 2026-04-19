@@ -107,6 +107,7 @@ func (c *CPClient) FetchStations(_ context.Context) ([]StationInfo, error) {
 		// alentejo
 		{Designation: "Évora", Code: "94-83006"},
 		{Designation: "Beja", Code: "94-75002"},
+		{Designation: "Casa Branca", Code: "94-74005"},
 		{Designation: "Badajoz", Code: "11-37606"},
 
 		// lisboa AML
