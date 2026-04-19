@@ -18,4 +18,26 @@ class ApiService {
     final data = json.decode(response.body);
     return Summary.fromJson(data);
   }
+
+  Future<List<Trip>> getWorstTrips() async {
+    final uri = Uri.parse('$baseUrl/api/stats/worst');
+
+    final response = await http.get(uri);
+    if (response.statusCode >= 300) {
+      throw Exception('Server error: ${response.statusCode}');
+    }
+    final data = json.decode(response.body) as List<dynamic>;
+    return data.map((item) => Trip.fromJson(item as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<LeaderboardEntry>> getWorstAverage() async {
+    final uri = Uri.parse('$baseUrl/api/stats/worst-average');
+
+    final response = await http.get(uri);
+    if (response.statusCode >= 300) {
+      throw Exception('Server error: ${response.statusCode}');
+    }
+    final data = json.decode(response.body) as List<dynamic>;
+    return data.map((item) => LeaderboardEntry.fromJson(item as Map<String, dynamic>)).toList();
+  }
 }

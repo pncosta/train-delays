@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 
 class ServiceTypeStats {
-  final ServiceTypes serviceType;
+  final ServiceType serviceType;
   final int totalTrips;
   final double avgDelay;
   final int onTimeCount;
@@ -45,20 +45,20 @@ class ServiceTypeStats {
 }
 
 class Summary {
-  final Map<ServiceTypes, ServiceTypeStats> breakdown;
+  final Map<ServiceType, ServiceTypeStats> breakdown;
 
   Summary({required this.breakdown});
 
   // Get the TOTAL_SYSTEM stats
   ServiceTypeStats get totalSystem {
-    return breakdown[ServiceTypes.Total] ??
-        ServiceTypeStats(serviceType: ServiceTypes.Total);
+    return breakdown[ServiceType.Total] ??
+        ServiceTypeStats(serviceType: ServiceType.Total);
   }
 
   // Get stats by service type excluding TOTAL_SYSTEM
   List<ServiceTypeStats> get serviceStats {
     return breakdown.values
-        .where((item) => item.serviceType != ServiceTypes.Total)
+        .where((item) => item.serviceType != ServiceType.Total)
         .toList();
   }
 
@@ -70,18 +70,18 @@ class Summary {
       return Summary(breakdown: {});
     }
 
-    Map<ServiceTypes, ServiceTypeStats> result = {};
+    Map<ServiceType, ServiceTypeStats> result = {};
 
     for (var e in list) {
-      final k =   ServiceTypeExtension.fromString(e['service_type'] ?? "");
+      final k = ServiceTypeExtension.fromString(e['service_type'] ?? "");
       final v = ServiceTypeStats.fromJson(e);
-      result[k] =  v;
+      result[k] = v;
     }
     return Summary(breakdown: result);
   }
 }
 
-enum ServiceTypes {
+enum ServiceType {
   Urban,
   Regional,
   InterCidades,
@@ -91,41 +91,130 @@ enum ServiceTypes {
   Other,
 }
 
-extension ServiceTypeExtension on ServiceTypes {
+extension ServiceTypeExtension on ServiceType {
+  static ServiceType fromString(String s) {
+    if (s == "U") return ServiceType.Urban;
+    if (s == "R") return ServiceType.Regional;
+    if (s == "IC") return ServiceType.InterCidades;
+    if (s == "AP") return ServiceType.AlfaPendular;
+    if (s == "IN") return ServiceType.International;
+    if (s == "TOTAL_SYSTEM") return ServiceType.Total;
 
-  static ServiceTypes fromString(String s) {
-    if (s == "U")
-      return ServiceTypes.Urban;
-    if (s == "R")
-      return ServiceTypes.Regional;
-    if (s == "IC")
-      return ServiceTypes.InterCidades;
-    if (s == "AP")
-      return ServiceTypes.AlfaPendular;
-    if (s == "IN")
-      return ServiceTypes.International;
-    if (s == "TOTAL_SYSTEM")
-      return ServiceTypes.Total;
-
-    return ServiceTypes.Other;
+    return ServiceType.Other;
   }
 
-
-String toLocalizedString(BuildContext context) {
-  switch (this) {
-    case ServiceTypes.Urban:
-      return "Urbano";
-    case ServiceTypes.Regional:
-      return "Regional";
-    case ServiceTypes.InterCidades:
-      return "Intercidades";
-    case ServiceTypes.AlfaPendular:
-      return "Alfa Pendular";
-    case ServiceTypes.International:
-      return "Internacional";
-    case ServiceTypes.Total:
-      return "Total";
-    default:
-      return "Outro";
+  String toLocalizedString(BuildContext context) {
+    switch (this) {
+      case ServiceType.Urban:
+        return "Urbano";
+      case ServiceType.Regional:
+        return "Regional";
+      case ServiceType.InterCidades:
+        return "Intercidades";
+      case ServiceType.AlfaPendular:
+        return "Alfa Pendular";
+      case ServiceType.International:
+        return "Internacional";
+      case ServiceType.Total:
+        return "Total";
+      default:
+        return "Outro";
+    }
   }
-}}
+}
+
+class Trip {
+  final String id;
+  final String trainNumber;
+  final ServiceType serviceType;
+  final String originStation;
+  final String destinationStation;
+
+  final String? scheduledDeparture;
+  final String? scheduledArrival;
+  final String? actualDeparture;
+  final String? actualArrival;
+
+  final int? delayMinutes;
+  final bool? isCancelled;
+  final String createdAt;
+  final String updatedAt;
+
+  Trip({
+    required this.id,
+    required this.trainNumber,
+    required this.serviceType,
+    required this.originStation,
+    required this.destinationStation,
+    this.scheduledDeparture,
+    this.scheduledArrival,
+    this.actualDeparture,
+    this.actualArrival,
+    this.delayMinutes,
+    this.isCancelled,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory Trip.fromJson(Map<String, dynamic> json) {
+    return Trip(
+      id: json['id'] ?? '',
+      trainNumber: json['train_number'] ?? '',
+      serviceType: ServiceTypeExtension.fromString(json['service_type'] ?? ''),
+      originStation: json['origin_station'] ?? '',
+      destinationStation: json['destination'] ?? '',
+      scheduledDeparture: json['scheduled_departure'],
+      scheduledArrival: json['scheduled_arrival'],
+      actualDeparture: json['actual_departure'],
+      actualArrival: json['actual_arrival'],
+      delayMinutes: json['delay_minutes'],
+      isCancelled: json['is_cancelled'],
+      createdAt: json['created_at'] ?? '',
+      updatedAt: json['updated_at'] ?? '',
+    );
+  }
+
+  bool get isDelayed {
+    if (isCancelled == true) {
+      return false;
+    }
+    final delayMinutes = this.delayMinutes;
+    if (delayMinutes == null) {
+      return false;
+    }
+
+    // For urban trains, >3 min is considered delay
+    // For regional and above, >5 min is considered delay
+    return (serviceType == ServiceType.Urban && delayMinutes > 3) ||
+        delayMinutes > 5;
+  }
+}
+
+class LeaderboardEntry {
+  final String trainNumber;
+  final ServiceType serviceType;
+  final String originStation;
+  final String destinationStation;
+  final double value; // avg delay, % of cancelled, etc
+  final int count; // number of trips considered for the Value
+
+  LeaderboardEntry({
+    required this.trainNumber,
+    required this.serviceType,
+    required this.originStation,
+    required this.destinationStation,
+    required this.value,
+    required this.count,
+  });
+
+  factory LeaderboardEntry.fromJson(Map<String, dynamic> json) {
+    return LeaderboardEntry(
+      trainNumber: json['train_number'] ?? '',
+      serviceType: ServiceTypeExtension.fromString(json['service_type'] ?? ''),
+      originStation: json['origin_station'] ?? '',
+      destinationStation: json['destination'] ?? '',
+      value: (json['value'] as num?)?.toDouble() ?? 0.0,
+      count: json['count'] ?? 0,
+    );
+  }
+}

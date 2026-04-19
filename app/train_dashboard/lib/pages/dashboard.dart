@@ -13,35 +13,65 @@ class Dashboard extends StatefulWidget {
 class _DashboardState extends State<Dashboard> {
   final api = ApiService();
   late Future<Summary> summaryFuture;
+  late Future<List<Trip>> worstFuture;
+  late Future<List<LeaderboardEntry>> worstAvgFuture;
 
   @override
   void initState() {
     super.initState();
-    summaryFuture = api.getSummary(); // Initial load
+    summaryFuture = api.getSummary();
+    worstFuture = api.getWorstTrips();
+    worstAvgFuture = api.getWorstAverage();
   }
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<Summary>(
       future: summaryFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        } else if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
-        }
-
-        final summary = snapshot.data!;
-        return DashboardContent(summary: summary);
+      builder: (context, summarySnapshot) {
+        return FutureBuilder<List<Trip>>(
+          future: worstFuture,
+          builder: (context, worstSnapshot) {
+            return FutureBuilder<List<LeaderboardEntry>>(
+              future: worstAvgFuture,
+              builder: (context, worstAvgSnapshot) {
+                final model = DashboardModel(
+                  summary: summarySnapshot,
+                  worstDelay: worstSnapshot,
+                  worstAvgDelays: worstAvgSnapshot,
+                );
+                return DashboardContent(model: model);
+              },
+            );
+          },
+        );
       },
     );
   }
 }
 
-class DashboardContent extends StatefulWidget {
-  final Summary summary;
+class DashboardModel {
+  AsyncSnapshot<Summary> summary;
+  AsyncSnapshot<List<Trip>> worstDelay;
+  AsyncSnapshot<List<LeaderboardEntry>> worstAvgDelays;
 
-  const DashboardContent({required this.summary, super.key});
+  DashboardModel({
+    required this.summary,
+    required this.worstDelay,
+    required this.worstAvgDelays,
+  });
+}
+
+class DashboardContent extends StatefulWidget {
+  const DashboardContent({
+    // required this.summary,
+    required this.model,
+    super.key,
+  });
+
+  // final Summary summary;
+
+  final DashboardModel model;
 
   @override
   State<DashboardContent> createState() => _DashboardContentState();
@@ -53,20 +83,55 @@ class _DashboardContentState extends State<DashboardContent> {
   @override
   void initState() {
     super.initState();
-    currentStats = widget.summary.totalSystem;
+    _initializeStats();
   }
 
-  void updateStats(ServiceTypes serviceType) {
+  void _initializeStats() {
+    currentStats =
+        widget.model.summary.data?.totalSystem ??
+        ServiceTypeStats(serviceType: ServiceType.Total);
+  }
+
+  @override
+  void didUpdateWidget(DashboardContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Rebuild stats when the model changes (i.e., when futures complete)
+    if (oldWidget.model != widget.model ||
+        oldWidget.model.summary != widget.model.summary) {
+      _initializeStats();
+    }
+  }
+
+  void updateStats(ServiceType serviceType) {
     setState(() {
       currentStats =
-          widget.summary.breakdown[serviceType] ?? widget.summary.totalSystem;
+          widget.model.summary.data?.breakdown[serviceType] ??
+          widget.model.summary.data?.totalSystem ??
+          ServiceTypeStats(serviceType: ServiceType.Total);
     });
   }
 
   @override
   Widget build(BuildContext context) {
     const minSize = 250.0;
-    final serviceStats = widget.summary.serviceStats;
+
+    // Check if summary data is still loading
+    if (widget.model.summary.connectionState == ConnectionState.waiting) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (widget.model.summary.hasError) {
+      return Center(
+        child: Text('Error loading dashboard: ${widget.model.summary.error}'),
+      );
+    }
+
+    if (!widget.model.summary.hasData) {
+      return const Center(child: Text('No data available'));
+    }
+
+    final summary = widget.model.summary.data!;
+    final serviceStats = summary.serviceStats;
 
     return SingleChildScrollView(
       child: Padding(
@@ -74,13 +139,15 @@ class _DashboardContentState extends State<DashboardContent> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Service Type Filter
             MultipleChoice(onChanged: updateStats),
-            // Summary Cards
+            // Summary Title
             Text(
               "Estatisticas da última semana",
               style: Theme.of(context).textTheme.displaySmall,
             ),
-            Padding(padding: EdgeInsetsGeometry.symmetric(vertical: 16.0)),
+            const SizedBox(height: 16),
+            // Summary cards
             Wrap(
               spacing: 16,
               runSpacing: 16,
@@ -134,7 +201,6 @@ class _DashboardContentState extends State<DashboardContent> {
                     value: currentStats.avgDelay.round().toString(),
                   ),
                 ),
-
                 // Pie Chart
                 ConstrainedBox(
                   constraints: const BoxConstraints(
@@ -151,9 +217,7 @@ class _DashboardContentState extends State<DashboardContent> {
                 ),
               ],
             ),
-
             const SizedBox(height: 24),
-
             // Service Type Breakdown
             const Text(
               'Breakdown by Service Type',
@@ -161,9 +225,81 @@ class _DashboardContentState extends State<DashboardContent> {
             ),
             const SizedBox(height: 12),
             ServiceTypeBreakdownTable(stats: serviceStats),
+            const SizedBox(height: 24),
+            // Worst trips section
+            _buildWorstTripsSection(),
+            const SizedBox(height: 24),
+            // Worst average section
+            _buildWorstAverageSection(),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildWorstTripsSection() {
+    final snapshot = widget.model.worstDelay;
+    if (snapshot.connectionState == ConnectionState.waiting) {
+      return const SizedBox(
+        height: 100,
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (snapshot.hasError) {
+      return Center(
+        child: Text('Error loading worst trips: ${snapshot.error}'),
+      );
+    }
+
+    final entries = snapshot.data;
+    if (entries == null || entries.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Worst Performing Trips',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 12),
+        TripsTable(trips: entries),
+      ],
+    );
+  }
+
+  Widget _buildWorstAverageSection() {
+    final snapshot = widget.model.worstAvgDelays;
+    if (snapshot.connectionState == ConnectionState.waiting) {
+      return const SizedBox(
+        height: 100,
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (snapshot.hasError) {
+      return Center(
+        child: Text('Error loading worst average: ${snapshot.error}'),
+      );
+    }
+
+    final entries = snapshot.data;
+    if (entries == null || entries.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Worst Average by Train',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 12),
+        LeaderboardEntryTable(entries: entries),
+      ],
     );
   }
 }
@@ -180,12 +316,12 @@ class ServiceTypeBreakdownTable extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         child: DataTable(
           columns: const [
-            DataColumn(label: Text('Service Type')),
+            DataColumn(label: Text('Tipo de Serviço')),
             DataColumn(label: Text('Total')),
-            DataColumn(label: Text('Avg Delay')),
-            DataColumn(label: Text('On Time')),
-            DataColumn(label: Text('Delayed')),
-            DataColumn(label: Text('Cancelled')),
+            DataColumn(label: Text('Atraso Médio')),
+            DataColumn(label: Text('A horas')),
+            DataColumn(label: Text('Atrasado')),
+            DataColumn(label: Text('Cancelado')),
           ],
           rows: stats.map((stat) {
             return DataRow(
@@ -216,14 +352,14 @@ class ServiceTypeBreakdownTable extends StatelessWidget {
 class MultipleChoice extends StatefulWidget {
   const MultipleChoice({super.key, this.onChanged});
 
-  final ValueChanged<ServiceTypes>? onChanged;
+  final ValueChanged<ServiceType>? onChanged;
 
   @override
   State<MultipleChoice> createState() => _MultipleChoiceState();
 }
 
 class _MultipleChoiceState extends State<MultipleChoice> {
-  ServiceTypes selectedType = ServiceTypes.Total;
+  ServiceType selectedType = ServiceType.Total;
 
   @override
   Widget build(BuildContext context) {
@@ -235,7 +371,7 @@ class _MultipleChoiceState extends State<MultipleChoice> {
           spacing: 8,
           runSpacing: 8,
           alignment: WrapAlignment.spaceAround,
-          children: ServiceTypes.values.map((ServiceTypes serviceType) {
+          children: ServiceType.values.map((ServiceType serviceType) {
             return FilterChip(
               label: Text(serviceType.toLocalizedString(context)),
               selected: selectedType == serviceType,
@@ -313,18 +449,105 @@ class StatsCard extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(height: 8),
-            Container(
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Icon(icon),
-              ),
-            ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
+            Padding(padding: const EdgeInsets.all(8.0), child: Icon(icon)),
+            const SizedBox(height: 8),
             child,
             Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class TripsTable extends StatelessWidget {
+  final List<Trip> trips;
+
+  const TripsTable({required this.trips, super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          columns: const [
+            DataColumn(label: Text('No. Comboio')),
+            DataColumn(label: Text('Tipo de Serviço')),
+            DataColumn(label: Text('Percurso')),
+            DataColumn(label: Text('Atraso')),
+            DataColumn(label: Text('Estado')),
+          ],
+          rows: trips.map((trip) {
+            return DataRow(
+              cells: [
+                DataCell(Text(trip.trainNumber)),
+                DataCell(Text(trip.serviceType.toLocalizedString(context))),
+                DataCell(
+                  Text('${trip.originStation} → ${trip.destinationStation}'),
+                ),
+                DataCell(Text('${trip.delayMinutes ?? 0} min')),
+                DataCell(
+                  Text(
+                    trip.isCancelled == true
+                        ? 'Cancelado'
+                        : trip.isDelayed
+                        ? 'Atrasado'
+                        : 'A horas',
+                    style: TextStyle(
+                      color: trip.isCancelled == true
+                          ? Colors.redAccent
+                          : trip.isDelayed ? Colors.orangeAccent : Colors.greenAccent,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+}
+
+class LeaderboardEntryTable extends StatelessWidget {
+  final List<LeaderboardEntry> entries;
+  final String unitLabel;
+
+  const LeaderboardEntryTable({
+    required this.entries,
+    this.unitLabel = "Average Value",
+    super.key,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          columns: [
+            DataColumn(label: Text('No.Comboio')),
+            DataColumn(label: Text('Tipo de Serviço')),
+            DataColumn(label: Text('Percurso')),
+            DataColumn(label: Text(unitLabel)),
+            DataColumn(label: Text('No. Viagens')),
+          ],
+          rows: entries.map((entry) {
+            return DataRow(
+              cells: [
+                DataCell(Text(entry.trainNumber)),
+                DataCell(Text(entry.serviceType.toLocalizedString(context))),
+                DataCell(
+                  Text('${entry.originStation} → ${entry.destinationStation}'),
+                ),
+                DataCell(Text(entry.value.toStringAsFixed(2))),
+                DataCell(Text(entry.count.toString())),
+              ],
+            );
+          }).toList(),
         ),
       ),
     );

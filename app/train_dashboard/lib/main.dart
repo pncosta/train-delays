@@ -37,9 +37,6 @@ class MainApp extends StatelessWidget {
             color: Colors.white,
             onPressed: () {
               launchUrl(Uri.parse('https://github.com/pncosta'));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('This is a snackbar')),
-              );
             },
           ),
         ],
