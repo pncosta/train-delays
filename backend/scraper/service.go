@@ -27,7 +27,6 @@ func getAndStoreTrips(ctx context.Context, cpClient *CPClient, dbClient *DBClien
 	nowLisbon := now().In(lisbon)
 	oneHourAgo := nowLisbon.Add(-1 * time.Hour)
 	day := oneHourAgo.Format("2006-01-02")
-	stations, _ := cpClient.FetchStations(ctx)
 	for _, station := range stations {
 		trips, err := cpClient.FetchTrips(ctx, station.Code, oneHourAgo)
 		if err != nil {
