@@ -107,7 +107,7 @@ func (c *DBClient) GetWorstlDelays(ctx context.Context, days int, limit int) ([]
 		scheduled_departure, 
 		actual_departure, 
 		actual_arrival, 
-		delay_minutes, is_cancelled, created_at
+		delay_minutes, is_cancelled, created_at, updated_at
         FROM trips
         WHERE created_at >= datetime('now', '-' || ? || ' days')
           AND delay_minutes IS NOT NULL
@@ -127,7 +127,7 @@ func (c *DBClient) GetWorstlDelays(ctx context.Context, days int, limit int) ([]
 		err := rows.Scan(&t.Id, &t.TrainNumber, &t.ServiceType,
 			&t.OriginStation, &t.DestinationStation,
 			&t.ScheduledArrival, &t.ScheduledDeparture, &t.ActualDeparture, &t.ActualArrival,
-			&t.DelayMinutes, &t.IsCancelled, &t.CreatedAt)
+			&t.DelayMinutes, &t.IsCancelled, &t.CreatedAt, &t.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
