@@ -58,6 +58,7 @@ func setupHandlers(ctx context.Context, env Env, dbClient *DBClient) (*http.Serv
 	mux := &http.ServeMux{}
 	mux.HandleFunc("GET /api/stats/summary", h.handleSummary(ctx, "", dbClient))
 	mux.HandleFunc("GET /api/stats/worst", h.handleWorstDelays(ctx, "", dbClient))
+	mux.HandleFunc("GET /api/stats/cancellations", h.handleCancellations(ctx, "", dbClient))
 	mux.HandleFunc("GET /api/stats/worst-average", h.handleWorstAverageDelays(ctx, "", dbClient))
 	return mux, nil
 }

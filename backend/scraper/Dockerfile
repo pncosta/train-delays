@@ -1,5 +1,5 @@
 # Build 
-FROM golang:1.25.0-alpine AS builder
+FROM golang:1.25.9-alpine AS builder
 
 # Allow HTTPS connections
 RUN apk add --no-cache ca-certificates

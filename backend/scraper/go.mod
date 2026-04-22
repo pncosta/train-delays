@@ -1,6 +1,6 @@
-module train-delays-scraper
+module train-delays/scraper
 
-go 1.25.0
+go 1.25.9
 
 require github.com/tursodatabase/libsql-client-go v0.0.0-20251219100830-236aa1ff8acc
 

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"train-delays/shared"
 
 	_ "github.com/tursodatabase/libsql-client-go/libsql" // New driver
 )
@@ -131,6 +132,68 @@ func (c *DBClient) GetWorstlDelays(ctx context.Context, days int, limit int) ([]
 		if err != nil {
 			return nil, err
 		}
+		originStation, ok := shared.Stations[t.OriginStation]
+		if ok {
+			t.OriginStationName = originStation.Designation
+		}
+
+		destinationStation, ok := shared.Stations[t.DestinationStation]
+		if ok {
+			t.DestinationStationName = destinationStation.Designation
+		}
+		trips = append(trips, t)
+	}
+	return trips, nil
+}
+
+func (c *DBClient) GetCancellations(ctx context.Context, days int, limit int) ([]Trip, error) {
+	db, err := sql.Open("libsql", c.dbConnectUrl)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+	defer db.Close()
+
+	query := `
+        SELECT id, train_number, service_type, 
+		origin_station, destination_station, 
+		scheduled_arrival, 
+		scheduled_departure, 
+		actual_departure, 
+		actual_arrival, 
+		delay_minutes, is_cancelled, created_at, updated_at
+        FROM trips
+        WHERE created_at >= datetime('now', '-' || ? || ' days')
+          AND is_cancelled = 1
+        ORDER BY created_at DESC
+        LIMIT ?;
+    `
+	rows, err := db.QueryContext(ctx, query, days, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var trips []Trip
+	for rows.Next() {
+		var t Trip
+		err := rows.Scan(&t.Id, &t.TrainNumber, &t.ServiceType,
+			&t.OriginStation, &t.DestinationStation,
+			&t.ScheduledArrival, &t.ScheduledDeparture, &t.ActualDeparture, &t.ActualArrival,
+			&t.DelayMinutes, &t.IsCancelled, &t.CreatedAt, &t.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+
+		originStation, ok := shared.Stations[t.OriginStation]
+		if ok {
+			t.OriginStationName = originStation.Designation
+		}
+
+		destinationStation, ok := shared.Stations[t.DestinationStation]
+		if ok {
+			t.DestinationStationName = destinationStation.Designation
+		}
+
 		trips = append(trips, t)
 	}
 	return trips, nil
@@ -187,6 +250,16 @@ func (c *DBClient) GetWorstAverageDelays(ctx context.Context, days int, limit in
 		if err != nil {
 			return nil, err
 		}
+		originStation, ok := shared.Stations[e.OriginStation]
+		if ok {
+			e.OriginStationName = originStation.Designation
+		}
+
+		destinationStation, ok := shared.Stations[e.DestinationStation]
+		if ok {
+			e.DestinationStationName = destinationStation.Designation
+		}
+
 		entries = append(entries, e)
 	}
 

@@ -15,11 +15,14 @@ type DashboardResponse struct {
 }
 
 type Trip struct {
-	Id                 string `json:"id"`
-	TrainNumber        string `json:"train_number"`
-	ServiceType        string `json:"service_type"`
-	OriginStation      string `json:"origin_station"`
-	DestinationStation string `json:"destination"`
+	Id          string `json:"id"`
+	TrainNumber string `json:"train_number"`
+	ServiceType string `json:"service_type"`
+
+	OriginStation          string `json:"origin_station"`
+	OriginStationName      string `json:"origin_station_name"`
+	DestinationStation     string `json:"destination_station"`
+	DestinationStationName string `json:"destination_station_name"`
 
 	ScheduledDeparture *string `json:"scheduled_departure"`
 	ScheduledArrival   *string `json:"scheduled_arrival"`
@@ -33,10 +36,12 @@ type Trip struct {
 }
 
 type LeaderboardEntry struct {
-	TrainNumber        string  `json:"train_number"`
-	ServiceType        string  `json:"service_type"`
-	OriginStation      string  `json:"origin_station"`
-	DestinationStation string  `json:"destination"`
-	Value              float64 `json:"value"` // avg delay, % of cancelled, etc
-	Count              int     `json:"count"` // number of trips considered for the Value
+	TrainNumber            string  `json:"train_number"`
+	ServiceType            string  `json:"service_type"`
+	OriginStation          string  `json:"origin_station"`
+	OriginStationName      string  `json:"origin_station_name"`
+	DestinationStation     string  `json:"destination_station"`
+	DestinationStationName string  `json:"destination_station_name"`
+	Value                  float64 `json:"value"` // avg delay, % of cancelled, etc
+	Count                  int     `json:"count"` // number of trips considered for the Value
 }
