@@ -14,6 +14,7 @@ class _DashboardState extends State<Dashboard> {
   final api = ApiService();
   late Future<Summary> summaryFuture;
   late Future<List<Trip>> worstFuture;
+  late Future<List<Trip>> cancelledFuture;
   late Future<List<LeaderboardEntry>> worstAvgFuture;
 
   @override
@@ -21,6 +22,7 @@ class _DashboardState extends State<Dashboard> {
     super.initState();
     summaryFuture = api.getSummary();
     worstFuture = api.getWorstTrips();
+    cancelledFuture = api.getCancellations();
     worstAvgFuture = api.getWorstAverage();
   }
 
@@ -32,15 +34,21 @@ class _DashboardState extends State<Dashboard> {
         return FutureBuilder<List<Trip>>(
           future: worstFuture,
           builder: (context, worstSnapshot) {
-            return FutureBuilder<List<LeaderboardEntry>>(
-              future: worstAvgFuture,
-              builder: (context, worstAvgSnapshot) {
-                final model = DashboardModel(
-                  summary: summarySnapshot,
-                  worstDelay: worstSnapshot,
-                  worstAvgDelays: worstAvgSnapshot,
+            return FutureBuilder(
+              future: cancelledFuture,
+              builder: (context, cancelledSnapshot) {
+                return FutureBuilder<List<LeaderboardEntry>>(
+                  future: worstAvgFuture,
+                  builder: (context, worstAvgSnapshot) {
+                    final model = DashboardModel(
+                      summary: summarySnapshot,
+                      worstDelay: worstSnapshot,
+                      worstAvgDelays: worstAvgSnapshot,
+                      cancelled: cancelledSnapshot,
+                    );
+                    return DashboardContent(model: model);
+                  },
                 );
-                return DashboardContent(model: model);
               },
             );
           },
@@ -53,11 +61,13 @@ class _DashboardState extends State<Dashboard> {
 class DashboardModel {
   AsyncSnapshot<Summary> summary;
   AsyncSnapshot<List<Trip>> worstDelay;
+  AsyncSnapshot<List<Trip>> cancelled;
   AsyncSnapshot<List<LeaderboardEntry>> worstAvgDelays;
 
   DashboardModel({
     required this.summary,
     required this.worstDelay,
+    required this.cancelled,
     required this.worstAvgDelays,
   });
 }
@@ -226,11 +236,11 @@ class _DashboardContentState extends State<DashboardContent> {
             const SizedBox(height: 12),
             ServiceTypeBreakdownTable(stats: serviceStats),
             const SizedBox(height: 24),
-            // Worst trips section
             _buildWorstTripsSection(),
             const SizedBox(height: 24),
-            // Worst average section
             _buildWorstAverageSection(),
+            const SizedBox(height: 24),
+            _buildCancelledTripsSection()
           ],
         ),
       ),
@@ -262,6 +272,39 @@ class _DashboardContentState extends State<DashboardContent> {
       children: [
         const Text(
           'Worst Performing Trips',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 12),
+        TripsTable(trips: entries),
+      ],
+    );
+  }
+
+  Widget _buildCancelledTripsSection() {
+    final snapshot = widget.model.cancelled;
+    if (snapshot.connectionState == ConnectionState.waiting) {
+      return const SizedBox(
+        height: 100,
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (snapshot.hasError) {
+      return Center(
+        child: Text('Error loading worst trips: ${snapshot.error}'),
+      );
+    }
+
+    final entries = snapshot.data;
+    if (entries == null || entries.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Cancelados',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
@@ -477,6 +520,9 @@ class TripsTable extends StatelessWidget {
             DataColumn(label: Text('No. Comboio')),
             DataColumn(label: Text('Tipo de Serviço')),
             DataColumn(label: Text('Percurso')),
+            DataColumn(label: Text('Dia')),
+            DataColumn(label: Text('Hora Saida')),
+            DataColumn(label: Text('Hora Chegada')),
             DataColumn(label: Text('Atraso')),
             DataColumn(label: Text('Estado')),
           ],
@@ -486,7 +532,30 @@ class TripsTable extends StatelessWidget {
                 DataCell(Text(trip.trainNumber)),
                 DataCell(Text(trip.serviceType.toLocalizedString(context))),
                 DataCell(
-                  Text('${trip.originStation} → ${trip.destinationStation}'),
+                  Text(
+                    '${trip.originStationName} → ${trip.destinationStationName}',
+                  ),
+                ),
+                DataCell(Text(trip.departureDate)),
+                DataCell(
+                  Text(trip.scheduledDeparture ?? trip.actualDeparture ?? '-'),
+                ),
+                DataCell(
+                  Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: trip.scheduledArrival ?? '-',
+                          style: TextStyle(
+                            color: Colors.grey,
+                            decoration: TextDecoration
+                                .lineThrough, // This adds the strikethrough
+                          ),
+                        ),
+                        TextSpan(text: trip.actualArrival ?? '-'),
+                      ],
+                    ),
+                  ),
                 ),
                 DataCell(Text('${trip.delayMinutes ?? 0} min')),
                 DataCell(
@@ -499,7 +568,9 @@ class TripsTable extends StatelessWidget {
                     style: TextStyle(
                       color: trip.isCancelled == true
                           ? Colors.redAccent
-                          : trip.isDelayed ? Colors.orangeAccent : Colors.greenAccent,
+                          : trip.isDelayed
+                          ? Colors.orangeAccent
+                          : Colors.greenAccent,
                     ),
                   ),
                 ),
@@ -541,7 +612,9 @@ class LeaderboardEntryTable extends StatelessWidget {
                 DataCell(Text(entry.trainNumber)),
                 DataCell(Text(entry.serviceType.toLocalizedString(context))),
                 DataCell(
-                  Text('${entry.originStation} → ${entry.destinationStation}'),
+                  Text(
+                    '${entry.originStationName} → ${entry.destinationStationName}',
+                  ),
                 ),
                 DataCell(Text(entry.value.toStringAsFixed(2))),
                 DataCell(Text(entry.count.toString())),

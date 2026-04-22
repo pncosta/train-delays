@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:intl/intl.dart';
 
 class ServiceTypeStats {
   final ServiceType serviceType;
@@ -128,7 +129,9 @@ class Trip {
   final String trainNumber;
   final ServiceType serviceType;
   final String originStation;
+  final String originStationName;
   final String destinationStation;
+  final String destinationStationName;
 
   final String? scheduledDeparture;
   final String? scheduledArrival;
@@ -145,7 +148,9 @@ class Trip {
     required this.trainNumber,
     required this.serviceType,
     required this.originStation,
+    required this.originStationName,
     required this.destinationStation,
+    required this.destinationStationName,
     this.scheduledDeparture,
     this.scheduledArrival,
     this.actualDeparture,
@@ -162,7 +167,9 @@ class Trip {
       trainNumber: json['train_number'] ?? '',
       serviceType: ServiceTypeExtension.fromString(json['service_type'] ?? ''),
       originStation: json['origin_station'] ?? '',
-      destinationStation: json['destination'] ?? '',
+      originStationName: json['origin_station_name'] ?? '<em falta>',
+      destinationStation: json['destination_station'] ?? '',
+      destinationStationName: json['destination_station_name'] ?? '<em falta>',
       scheduledDeparture: json['scheduled_departure'],
       scheduledArrival: json['scheduled_arrival'],
       actualDeparture: json['actual_departure'],
@@ -172,6 +179,11 @@ class Trip {
       createdAt: json['created_at'] ?? '',
       updatedAt: json['updated_at'] ?? '',
     );
+  }
+
+  String get departureDate {
+    DateTime dateTime = DateTime.parse(createdAt);
+    return DateFormat("dd-MM-yyyy").format(dateTime);
   }
 
   bool get isDelayed {
@@ -194,7 +206,9 @@ class LeaderboardEntry {
   final String trainNumber;
   final ServiceType serviceType;
   final String originStation;
+  final String originStationName;
   final String destinationStation;
+  final String destinationStationName;
   final double value; // avg delay, % of cancelled, etc
   final int count; // number of trips considered for the Value
 
@@ -202,7 +216,9 @@ class LeaderboardEntry {
     required this.trainNumber,
     required this.serviceType,
     required this.originStation,
+    required this.originStationName,
     required this.destinationStation,
+    required this.destinationStationName,
     required this.value,
     required this.count,
   });
@@ -212,7 +228,9 @@ class LeaderboardEntry {
       trainNumber: json['train_number'] ?? '',
       serviceType: ServiceTypeExtension.fromString(json['service_type'] ?? ''),
       originStation: json['origin_station'] ?? '',
-      destinationStation: json['destination'] ?? '',
+      originStationName: json['origin_station_name'] ?? '<em falta>',
+      destinationStation: json['destination_station'] ?? '',
+      destinationStationName: json['destination_station_name'] ?? '<em falta>',
       value: (json['value'] as num?)?.toDouble() ?? 0.0,
       count: json['count'] ?? 0,
     );
