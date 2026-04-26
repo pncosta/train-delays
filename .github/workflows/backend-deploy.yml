@@ -19,6 +19,7 @@ on:
     paths: 
       - 'backend/web-server/**'
       - 'backend/scraper/**'
+      - 'backend/shared/**' 
 
 permissions:
   contents: 'read'
@@ -41,18 +42,17 @@ jobs:
 
       # Deploy Web Server
       - name: 'Deploy Web Server (Dev)'
-        if: contains(github.event.head_commit.modified, 'backend/web-server/') || github.event_name == 'workflow_dispatch'
+        if: contains(github.event.head_commit.modified, 'backend/web-server/') || ${{ github.event.inputs.deploy_web == 'true' }}
         uses: 'google-github-actions/deploy-cloudrun@v2'
         with:
           service: 'backend-dev'
-          region: 'europe-southwest1'
+          region: 'europe-southwest1' # web server is in europe-southwest1 to be close to the users
           source: './backend/web-server'
           env_vars_file: 'backend/env.yaml'
-      
       # Deploy Scraper (Job)
       - name: 'Deploy Scraper Job'
-        if: contains(github.event.head_commit.modified, 'backend/scraper/') || github.event_name == 'workflow_dispatch'
-        run: |
+        if: contains(github.event.head_commit.modified, 'backend/scraper/') || ${{ github.event.inputs.deploy_scraper == 'true' }}
+        run: |  # scraper is in europe-west1 
           gcloud run jobs deploy scraper-job-dev \
             --source ./backend/scraper \
             --region europe-west1 \
