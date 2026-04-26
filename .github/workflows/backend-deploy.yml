@@ -46,15 +46,17 @@ jobs:
         uses: 'google-github-actions/deploy-cloudrun@v2'
         with:
           service: 'backend-dev'
+          source: './backend' # include all backend to include shared libs      
+          flags: '--dockerfile=web-server/Dockerfile'
           region: 'europe-southwest1' # web server is in europe-southwest1 to be close to the users
-          source: './backend/web-server'
           env_vars_file: 'backend/env.yaml'
       # Deploy Scraper (Job)
       - name: 'Deploy Scraper Job'
         if: contains(github.event.head_commit.modified, 'backend/scraper/') || ${{ github.event.inputs.deploy_scraper == 'true' }}
         run: |  # scraper is in europe-west1 
           gcloud run jobs deploy scraper-job-dev \
-            --source ./backend/scraper \
+            --source ./backend \
+            --dockerfile scraper/Dockerfile \
             --region europe-west1 \
             --env-vars-file backend/env.yaml \
             --quiet
