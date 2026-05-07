@@ -1,6 +1,6 @@
-name: Backend Deploy (PROD)
+name: Deploy (PROD)
 on:
-  workflow_dispatch: 
+  workflow_dispatch:
     inputs:
       deploy_web:
         description: 'Deploy Web Server?'
@@ -34,20 +34,27 @@ jobs:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
           service_account: 'github-actions-sa@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com'
 
+      - name: 'Copy Web Server Dockerfile'
+        if: inputs.deploy_web
+        run: cp backend/web-server/Dockerfile backend/Dockerfile
+
+      # Deploy Web Server
       - name: 'Deploy Web Server (PROD)'
-        if: ${{ github.event.inputs.deploy_web == 'true' }}
+        if: inputs.deploy_web
         uses: 'google-github-actions/deploy-cloudrun@v2'
         with:
           service: 'backend-prod'
-          region: 'europe-southwest1'
-          source: './backend/web-server'
+          source: './backend' # include all backend to include shared libs
+          region: 'europe-southwest1' # web server is in europe-southwest1
           env_vars_file: 'backend/env.yaml'
-      
+
+      # Deploy Scraper (Job)
       - name: 'Deploy Scraper Job (PROD)'
-        if: ${{ github.event.inputs.deploy_scraper == 'true' }}
-        run: |
+        if: inputs.deploy_scraper
+        run: |  # scraper is in europe-west1 
+          cp backend/scraper/Dockerfile backend/Dockerfile
           gcloud run jobs deploy scraper-job-prod \
-            --source ./backend/scraper \
+            --source ./backend \
             --region europe-west1 \
             --env-vars-file backend/env.yaml \
             --quiet
