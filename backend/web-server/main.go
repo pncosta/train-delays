@@ -80,6 +80,7 @@ func readEnv() Env {
 	}
 
 	dbToken := os.Getenv("TURSO_DB_TOKEN")
+	print(TURSO_DB_TOKEN)
 	if dbToken == "" {
 		panic("missing TURSO_DB_TOKEN")
 	}
