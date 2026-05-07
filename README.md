@@ -6,7 +6,7 @@ It is build in go and is composed of:
 - web app to visualise the data 
 
 ## Run
-
+f
 ### Env Vars
 
 The following env vars are expected either on the scraper or web server:
