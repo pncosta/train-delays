@@ -5,18 +5,29 @@ FROM golang:1.25.9-alpine AS builder
 RUN apk add --no-cache ca-certificates
 WORKDIR /app
 
-# go dependencies   
-COPY go.mod go.sum ./
+# 1. Copy the workspace and module files first
+COPY go.work ./
+COPY shared/go.mod ./shared/
+COPY web-server/go.mod ./web-server/
+COPY scraper/go.mod ./scraper/
+
+# 2. Download dependencies
 RUN go mod download
 
-COPY . .
-RUN go build -o main .
+# 3. Copy the actual source code
+COPY shared/ ./shared/
+COPY scraper/ ./scraper/
+
+# 4. Build the specific binary
+WORKDIR /app/scraper
+RUN go build -o /main .
+
 
 # Run
 FROM alpine:latest
-RUN apk add --no-cache tzdata
-WORKDIR /root/
-COPY --from=builder /app/main .
+RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates tzdata
+COPY --from=builder /main /main
 # Use the PORT environment variable
 ENV PORT=8080
 CMD ["./main"]
