@@ -4,7 +4,7 @@ It is build in go and is composed of:
 - periodid job that scrapes the CP API to get the delays of each train travel and store it on a DB
 - server to get the data
 - web app to visualise the data 
-
+-
 ## Run
 
 ### Env Vars
