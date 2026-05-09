@@ -30,7 +30,7 @@ var Stations = map[string]StationInfo{
 	"94-61101": {Designation: "Sintra", Code: "94-61101"},
 	// Cascais
 	"94-69260": {Designation: "Cascais", Code: "94-69260"},
-	"94-69005": {Designation: "Cais Sodre", Code: "94-69005"},
+	"94-69005": {Designation: "Cais do Sodré", Code: "94-69005"},
 	"94-69179": {Designation: "Oeiras", Code: "94-69179"},
 	"94-69229": {Designation: "Sao Pedro Estoril", Code: "94-69229"},
 	"94-69120": {Designation: "Caxias", Code: "94-69120"},
