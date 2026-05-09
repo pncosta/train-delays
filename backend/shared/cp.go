@@ -81,7 +81,7 @@ var Stations = map[string]StationInfo{
 	"94-12005": {Designation: "Pocinho", Code: "94-12005"},
 	"94-10009": {Designation: "Régua", Code: "94-10009"},
 	"94-9001":  {Designation: "Marco Canaveses", Code: "94-9001"},
-	"94-8383": {Designation: "Caide", Code: "94-8383"},
+	"94-8383": {Designation: "Caíde", Code: "94-8383"},
 	"94-11007": {Designation: "Tua", Code: "94-11007"},
 	// Vouga
 	"94-44016": {Designation: "Espinho Vouga", Code: "94-44016"},
