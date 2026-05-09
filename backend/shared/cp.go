@@ -11,7 +11,7 @@ var Stations = map[string]StationInfo{
 	"94-73007": {Designation: "Faro", Code: "94-73007"},
 	"94-90464": {Designation: "Lagos", Code: "94-90464"},
 	"94-73569": {Designation: "Vila Real de Santo António", Code: "94-73569"},
-	"94-90290": {Designation: "Portimao", Code: "94-90290"},
+	"94-90290": {Designation: "Portimão", Code: "94-90290"},
 
 	// alentejo
 	"94-83006": {Designation: "Évora", Code: "94-83006"},
