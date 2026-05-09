@@ -72,8 +72,8 @@ var Stations = map[string]StationInfo{
 	"94-38000": {Designation: "Aveiro", Code: "94-38000"},
 	"94-18002": {Designation: "Viana do Castelo", Code: "94-18002"},
 	"94-6007":  {Designation: "Nine", Code: "94-6007"},
-	"94-21071": {Designation: "Leca do Balio", Code: "94-21071"},
-	"94-5074": {Designation: "Famalicao", Code: "94-5074"},
+	"94-21071": {Designation: "Leça do Balio", Code: "94-21071"},
+	"94-5074": {Designation: "Famalicão", Code: "94-5074"},
 	// Aveiro
 	"94-38299": {Designation: "Ovar", Code: "94-38299"},
 	"94-39040": {Designation: "Granja", Code: "94-39040"},
