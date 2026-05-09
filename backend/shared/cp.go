@@ -17,7 +17,7 @@ var Stations = map[string]StationInfo{
 	"94-83006": {Designation: "Évora", Code: "94-83006"},
 	"94-75002": {Designation: "Beja", Code: "94-75002"},
 	"94-74005": {Designation: "Casa Branca", Code: "94-74005"},
-	"94-74278": {Designation: "Vila Nova Baronia", Code: "94-74278"},
+	"94-74278": {Designation: "Vila Nova da Baronia", Code: "94-74278"},
 
 	// lisboa AML
 	"94-31039": {Designation: "Lisboa Oriente", Code: "94-31039"},
