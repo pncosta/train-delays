@@ -60,7 +60,7 @@ var Stations = map[string]StationInfo{
 	"94-49007": {Designation: "Guarda", Code: "94-49007"},
 	"94-54007": {Designation: "Covilhã", Code: "94-54007"},
 	"94-52167": {Designation: "Mouriscas", Code: "94-52167"},
-	"94-52647": {Designation: "Vila Velha de Rodao", Code: "94-52647"},
+	"94-52647": {Designation: "Vila Velha de Ródão", Code: "94-52647"},
 
 	// --- NORTH (Porto Urbanos, Minho, Douro) ---
 	"94-2006":  {Designation: "Porto Campanhã", Code: "94-2006"},
