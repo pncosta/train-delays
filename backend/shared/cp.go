@@ -87,7 +87,7 @@ var Stations = map[string]StationInfo{
 	"94-44016": {Designation: "Espinho Vouga", Code: "94-44016"},
 	"94-44339": {Designation: "Oliveira Azemeis", Code: "94-44339"},
 	"94-43000": {Designation: "Sernada Vouga", Code: "94-43000"},
-	"94-42218": {Designation: "Agueda", Code: "94-42218"},
+	"94-42218": {Designation: "Águeda", Code: "94-42218"},
 	"94-42325": {Designation: "Macinhata", Code: "94-42325"},
 
 	// internacional
