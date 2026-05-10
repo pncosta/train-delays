@@ -54,7 +54,7 @@ func NewCPClient(baseURL, apiKey, connectID, connectSecret string) *CPClient {
 		ConnectID:     connectID,
 		ConnectSecret: connectSecret,
 		HTTPClient: &http.Client{
-			Timeout: 15 * time.Second,
+			Timeout: 30 * time.Second,
 		},
 	}
 }
@@ -72,6 +72,7 @@ func (c *CPClient) FetchTrips(ctx context.Context, stationID string, startTime t
 	req.Header.Set("x-api-key", c.ApiKey)
 	req.Header.Set("x-cp-connect-id", c.ConnectID)
 	req.Header.Set("x-cp-connect-secret", c.ConnectSecret)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
