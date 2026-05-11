@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
+	"io"
 	"net/http"
 	"time"
 	"train-delays/shared"
@@ -48,13 +50,24 @@ type CPClient struct {
 
 // NewCPClient initializes the CP client
 func NewCPClient(baseURL, apiKey, connectID, connectSecret string) *CPClient {
+    dialer := &net.Dialer{
+		Timeout:   5 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
+	transport := &http.Transport{
+        DialContext:           dialer.DialContext,
+		TLSHandshakeTimeout:   5 * time.Second,
+		IdleConnTimeout:       90 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
 	return &CPClient{
 		BaseURL:       baseURL,
 		ApiKey:        apiKey,
 		ConnectID:     connectID,
 		ConnectSecret: connectSecret,
 		HTTPClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Transport: transport,
+            Timeout:   15 * time.Second,
 		},
 	}
 }
@@ -73,13 +86,23 @@ func (c *CPClient) FetchTrips(ctx context.Context, stationID string, startTime t
 	req.Header.Set("x-cp-connect-id", c.ConnectID)
 	req.Header.Set("x-cp-connect-secret", c.ConnectSecret)
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Accept", "application/json")
+    req.Header.Set("Referer", "https://www.cp.pt/")
+    req.Header.Set("sec-ch-ua-platform", `"macOS"`)
 
+//     start := time.Now()
 	resp, err := c.HTTPClient.Do(req)
+// 	fmt.Printf("API call took: %s\n", time.Since(start))
+
 	if err != nil {
+		fmt.Printf("Error! %v\n", err)
 		return nil, fmt.Errorf("http error: %w", err)
 	}
-	defer resp.Body.Close()
-
+    defer func() {
+        io.Copy(io.Discard, resp.Body) // read any leftover bytes to reuse connection
+        resp.Body.Close()
+     }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("api returned status %d", resp.StatusCode)
 	}
