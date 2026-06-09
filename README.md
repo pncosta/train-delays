@@ -1,7 +1,7 @@
 This is a WIP project that aims to track the ponctuality, delays and supressions of the portuguese trains from CP company.
 
 It is build in go and is composed of:
-- periodid job that scrapes the CP API to get the delays of each train travel and store it on a DB
+- periodic job that scrapes the CP API to get the delays of each train travel and store it on a DB
 - server to get the data
 - web app to visualise the data 
 
@@ -25,10 +25,18 @@ Simply do the obvious `go run .`
 
 ### Locally with Docker
 
+The backend is setup with one go workspace composed of:
+- a shared lib with generic code
+- scraper 
+- webserver
 
-build `docker build -t <name> .`
-and run `docker run -p 8080:8080 --env-file env/env.local.env <name>`
 
+To run the web-server, from the root folder of the go workspace:
+
+build `docker build -f web-server/Dockerfile -t web-server .`
+and run `docker run -p 8080:8080 --env-file env/env.local.env web-server`
+
+(and same for the scrapper)
 
 ## Deploy
 
@@ -57,6 +65,3 @@ deployment to prod is manually via gh actions
 ### DB
 
 [Turso](https://turso.tech/) is being used as provider for a SQL DB
-
-
-
