@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:train_dashboard/widgets/leaderboard_entry_card.dart';
 import '../services/api.dart';
 import '../models/summary.dart';
 import '../widgets/pie_chart.dart';
+import '../widgets/trip_card.dart';
 
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
@@ -156,6 +158,7 @@ class _DashboardContentState extends State<DashboardContent> {
               "Estatisticas da última semana",
               style: Theme.of(context).textTheme.displaySmall,
             ),
+
             const SizedBox(height: 16),
             // Summary cards
             Wrap(
@@ -240,7 +243,7 @@ class _DashboardContentState extends State<DashboardContent> {
             const SizedBox(height: 24),
             _buildWorstAverageSection(),
             const SizedBox(height: 24),
-            _buildCancelledTripsSection()
+            _buildCancelledTripsSection(),
           ],
         ),
       ),
@@ -275,7 +278,8 @@ class _DashboardContentState extends State<DashboardContent> {
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
-        TripsTable(trips: entries),
+        ...entries // TODO: use listview/builder
+            .map((currentTrip) => TrainTripCard(trip: currentTrip)),
       ],
     );
   }
@@ -308,7 +312,8 @@ class _DashboardContentState extends State<DashboardContent> {
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
-        TripsTable(trips: entries),
+        ...entries // TODO: use listview/builder
+            .map((currentTrip) => TrainTripCard(trip: currentTrip)),
       ],
     );
   }
@@ -341,7 +346,8 @@ class _DashboardContentState extends State<DashboardContent> {
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
-        LeaderboardEntryTable(entries: entries),
+        ...entries // TODO: use listview/builder
+            .map((currentTrip) => LeaderboardEntryCard(trip: currentTrip)),
       ],
     );
   }
@@ -499,128 +505,6 @@ class StatsCard extends StatelessWidget {
             Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class TripsTable extends StatelessWidget {
-  final List<Trip> trips;
-
-  const TripsTable({required this.trips, super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          columns: const [
-            DataColumn(label: Text('No. Comboio')),
-            DataColumn(label: Text('Tipo de Serviço')),
-            DataColumn(label: Text('Percurso')),
-            DataColumn(label: Text('Dia')),
-            DataColumn(label: Text('Hora Saida')),
-            DataColumn(label: Text('Hora Chegada')),
-            DataColumn(label: Text('Atraso')),
-            DataColumn(label: Text('Estado')),
-          ],
-          rows: trips.map((trip) {
-            return DataRow(
-              cells: [
-                DataCell(Text(trip.trainNumber)),
-                DataCell(Text(trip.serviceType.toLocalizedString(context))),
-                DataCell(
-                  Text(
-                    '${trip.originStationName} → ${trip.destinationStationName}',
-                  ),
-                ),
-                DataCell(Text(trip.departureDate)),
-                DataCell(
-                  Text(trip.scheduledDeparture ?? trip.actualDeparture ?? '-'),
-                ),
-                DataCell(
-                  Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(
-                          text: trip.scheduledArrival ?? '-',
-                          style: TextStyle(
-                            color: Colors.grey,
-                            decoration: TextDecoration
-                                .lineThrough, // This adds the strikethrough
-                          ),
-                        ),
-                        TextSpan(text: trip.actualArrival ?? '-'),
-                      ],
-                    ),
-                  ),
-                ),
-                DataCell(Text('${trip.delayMinutes ?? 0} min')),
-                DataCell(
-                  Text(
-                    trip.isCancelled == true
-                        ? 'Cancelado'
-                        : trip.isDelayed
-                        ? 'Atrasado'
-                        : 'A horas',
-                    style: TextStyle(
-                      color: trip.isCancelled == true
-                          ? Colors.redAccent
-                          : trip.isDelayed
-                          ? Colors.orangeAccent
-                          : Colors.greenAccent,
-                    ),
-                  ),
-                ),
-              ],
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
-}
-
-class LeaderboardEntryTable extends StatelessWidget {
-  final List<LeaderboardEntry> entries;
-  final String unitLabel;
-
-  const LeaderboardEntryTable({
-    required this.entries,
-    this.unitLabel = "Average Value",
-    super.key,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          columns: [
-            DataColumn(label: Text('No.Comboio')),
-            DataColumn(label: Text('Tipo de Serviço')),
-            DataColumn(label: Text('Percurso')),
-            DataColumn(label: Text(unitLabel)),
-            DataColumn(label: Text('No. Viagens')),
-          ],
-          rows: entries.map((entry) {
-            return DataRow(
-              cells: [
-                DataCell(Text(entry.trainNumber)),
-                DataCell(Text(entry.serviceType.toLocalizedString(context))),
-                DataCell(
-                  Text(
-                    '${entry.originStationName} → ${entry.destinationStationName}',
-                  ),
-                ),
-                DataCell(Text(entry.value.toStringAsFixed(2))),
-                DataCell(Text(entry.count.toString())),
-              ],
-            );
-          }).toList(),
         ),
       ),
     );
