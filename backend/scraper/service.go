@@ -27,7 +27,6 @@ func getAndStoreTrips(ctx context.Context, cpClient *CPClient, dbClient *DBClien
 
 	nowLisbon := now().In(lisbon)
 	oneHourAgo := nowLisbon.Add(-1 * time.Hour)
-	day := oneHourAgo.Format("2006-01-02")
 	for _, station := range shared.Stations {
 		trips, err := cpClient.FetchTrips(ctx, station.Code, oneHourAgo)
 		if err != nil {
@@ -35,14 +34,14 @@ func getAndStoreTrips(ctx context.Context, cpClient *CPClient, dbClient *DBClien
 		}
 		// Filter out trips that START in current station - from those we want to store the staring time
 		startingTrips := filterStartingTrips(trips, nowLisbon, station.Code)
-		err = dbClient.InsertStartingTrips(day, startingTrips)
+		err = dbClient.InsertStartingTrips(nowLisbon, startingTrips)
 		if err != nil {
 			fmt.Printf("error saving trips: %v", err)
 		}
 
 		// Filter out trips that END in current station - from those we want to store all the other data
 		endingTrips := filterEndingTrips(trips, nowLisbon, station.Code)
-		err = dbClient.InsertEndingTrips(day, endingTrips)
+		err = dbClient.InsertEndingTrips(nowLisbon, endingTrips)
 		if err != nil {
 			fmt.Printf("error saving trips: %v", err)
 		}
@@ -54,64 +53,55 @@ func getAndStoreTrips(ctx context.Context, cpClient *CPClient, dbClient *DBClien
 // filters out trip that start in the given originStation
 // and whose departing hour was few minutes ago or in the next minutes
 func filterStartingTrips(trips []Trip, now time.Time, originStation string) []Trip {
-	startingTrips := Filter(trips, func(t Trip) bool {
+	windowStart := now.Add(-30 * time.Minute)
+	windowEnd := now.Add(15 * time.Minute)
+
+	return Filter(trips, func(t Trip) bool {
 		if !strings.HasPrefix(t.TrainOrigin.Code, originStation) {
 			return false
 		}
 
-		if t.DepartureTime != nil {
-			departure, err := time.ParseInLocation("2006-01-02 15:04", now.Format("2006-01-02")+" "+*t.DepartureTime, now.Location())
-			if err != nil {
-				return false
-			}
-
-			windowStart := now.Add(-1 * 30 * time.Minute)
-			windowEnd := now.Add(15 * time.Minute)
-			if departure.After(windowStart) && departure.Before(windowEnd) {
-				return true
-			}
+		if t.DepartureTime == nil {
+			return false
 		}
-		return false
+
+		departure, err := resolveClockTime(*t.DepartureTime, now)
+		if err != nil {
+			return false
+		}
+
+		return departure.After(windowStart) && departure.Before(windowEnd)
 	})
-	return startingTrips
 }
 
 // filters out trip that end in the given destinationStation
 // and whose arrival hour was few minutes ago or in the next minutes
 func filterEndingTrips(trips []Trip, now time.Time, destinationStation string) []Trip {
-	startingTrips := Filter(trips, func(t Trip) bool {
+	windowStart := now.Add(-30 * time.Minute)
+	windowEnd := now.Add(15 * time.Minute)
+
+	return Filter(trips, func(t Trip) bool {
 		if !strings.HasPrefix(t.TrainDestination.Code, destinationStation) {
 			return false
 		}
 
-		// TODO - check what happens at midnight and if it is relevant or not
-		windowStart := now.Add(-1 * 30 * time.Minute)
-		windowEnd := now.Add(15 * time.Minute)
-
 		if t.ETA != nil {
-			// Create a new time with ETA from trip and adding current day
-			eta, err := time.ParseInLocation("2006-01-02 15:04", now.Format("2006-01-02")+" "+*t.ETA, now.Location())
-			if err != nil {
-				return false
-			}
-			if eta.After(windowStart) && eta.Before(windowEnd) {
-				return true
+			if eta, err := resolveClockTime(*t.ETA, now); err == nil {
+				if eta.After(windowStart) && eta.Before(windowEnd) {
+					return true
+				}
 			}
 		}
 
 		if t.ArrivalTime != nil {
-			// Create a new time with ETA from trip and adding current day
-			eta, err := time.ParseInLocation("2006-01-02 15:04", now.Format("2006-01-02")+" "+*t.ArrivalTime, now.Location())
-			if err != nil {
-				return false
-			}
-			if eta.After(windowStart) && eta.Before(windowEnd) {
-				return true
+			if arrival, err := resolveClockTime(*t.ArrivalTime, now); err == nil {
+				if arrival.After(windowStart) && arrival.Before(windowEnd) {
+					return true
+				}
 			}
 		}
 
 		// either ETA and arrivaltime are nil OR both are too much in the future and trip can be igored
 		return false
 	})
-	return startingTrips
 }
