@@ -3,6 +3,7 @@ package main
 import (
 	"testing"
 	"time"
+	"train-delays/shared"
 )
 
 func TestFilterEndingTrips(t *testing.T) {
@@ -56,13 +57,29 @@ func TestFilterEndingTrips(t *testing.T) {
 			givenTripDestination: "LISBON-A",
 			wantCount:            0,
 		},
+		{
+			name:                 "Midnight: arrival 15 min ago but clock string is still yesterday's date",
+			now:                  time.Date(2026, 4, 5, 0, 5, 0, 0, loc),
+			destinationStation:   "LISBON",
+			givenTripArrivalTime: "23:50",
+			givenTripDestination: "LISBON",
+			wantCount:            1,
+		},
+		{
+			name:                 "Midnight: arrival in 10 min but clock string is already tomorrow's date",
+			now:                  time.Date(2026, 4, 5, 23, 55, 0, 0, loc),
+			destinationStation:   "LISBON",
+			givenTripArrivalTime: "00:05",
+			givenTripDestination: "LISBON",
+			wantCount:            1,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Mock data
 			trips := []Trip{
 				{
-					TrainDestination: StationInfo{Code: tt.givenTripDestination},
+					TrainDestination: shared.StationInfo{Code: tt.givenTripDestination},
 					ArrivalTime:      strPtr(tt.givenTripArrivalTime),
 				},
 			}
@@ -127,13 +144,29 @@ func TestFilterStartingTrips(t *testing.T) {
 			givenTripOrigin:        "LISBON-A",
 			wantCount:              0,
 		},
+		{
+			name:                   "Midnight: departed 15 min ago but clock string is still yesterday's date",
+			now:                    time.Date(2026, 4, 5, 0, 5, 0, 0, loc),
+			originStation:          "LISBON",
+			givenTripDepartureTime: "23:50",
+			givenTripOrigin:        "LISBON",
+			wantCount:              1,
+		},
+		{
+			name:                   "Midnight: departs in 10 min but clock string is already tomorrow's date",
+			now:                    time.Date(2026, 4, 5, 23, 55, 0, 0, loc),
+			originStation:          "LISBON",
+			givenTripDepartureTime: "00:05",
+			givenTripOrigin:        "LISBON",
+			wantCount:              1,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Mock data
 			trips := []Trip{
 				{
-					TrainOrigin:   StationInfo{Code: tt.givenTripOrigin},
+					TrainOrigin:   shared.StationInfo{Code: tt.givenTripOrigin},
 					DepartureTime: strPtr(tt.givenTripDepartureTime),
 				},
 			}

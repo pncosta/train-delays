@@ -3,3 +3,8 @@
 **/*.env
 # db files
 **/*.db
+
+# compiled Go binaries left behind by `go build ./...`
+backend/scraper/scraper
+backend/web-server/web-server
+backend/shared/shared
