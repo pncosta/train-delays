@@ -8,3 +8,6 @@
 backend/scraper/scraper
 backend/web-server/web-server
 backend/shared/shared
+
+# per-machine Claude Code permissions, not shared project config
+.claude/settings.local.json
