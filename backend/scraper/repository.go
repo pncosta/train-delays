@@ -135,10 +135,11 @@ func resolveArrivalDay(trip Trip, now time.Time) string {
 }
 
 // findOpenTripID returns the id of the most recent trip row for trainNumber that has
-// a departure but no recorded arrival yet, bounded to the last couple of days so an
-// old abandoned row can't get matched to an unrelated trip reusing the same number.
+// a departure but no recorded arrival yet. A given train number only runs once every
+// 24h, so a still-open row older than that can't be today's departure - it's an
+// abandoned row from a previous day, and matching it would corrupt unrelated data.
 func findOpenTripID(db *sql.DB, trainNumber int, now time.Time) (string, bool, error) {
-	cutoff := now.Add(-48 * time.Hour).UTC().Format("2006-01-02 15:04:05")
+	cutoff := now.Add(-24 * time.Hour).UTC().Format("2006-01-02 15:04:05")
 
 	var id string
 	err := db.QueryRow(`
