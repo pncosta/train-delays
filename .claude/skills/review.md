@@ -67,6 +67,10 @@ Present:
 <one-line gate: e.g. "2 blockers — fix before commit" or "No blocking issues.">
 Reviewers run: review-correctness, review-engineering[, review-go]   (skipped: review-go — no .go files changed)
 
+## Files reviewed
+path/to/file.go
+...
+
 ## Findings
 [severity] path/file:line — summary   (lens: review-correctness)
   - what's wrong / failing scenario

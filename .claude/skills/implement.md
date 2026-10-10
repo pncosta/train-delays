@@ -1,6 +1,6 @@
 ---
 name: implement
-description: Implement a task, bug fix, or feature in pt-train-delays. Delegates the whole change to a single implementer agent (write access) that follows the repo's existing conventions, then independently gates on build/vet/test and loops fixes until green. Does NOT run /review — that stays a separate, human-gated step. Use when the user asks to "implement", "build", "add", "fix", or "make the change" (from a BACKLOG.md item or an ad-hoc request).
+description: Implement a task, bug fix, or feature in pt-train-delays. Delegates the whole change to a single implementer agent (write access) that follows the repo's existing conventions, then independently gates on build/vet/test and loops fixes until green. Auto-chains to /review once green (per CLAUDE.md), unless told not to. Use when the user asks to "implement", "build", "add", "fix", or "make the change" (from a BACKLOG.md item or an ad-hoc request).
 ---
 
 # /implement — build a change coherently, then gate on the build
@@ -23,6 +23,12 @@ open an editor, stop and spawn the agent instead.
   pass its **exact text** to the agent — that bullet is the spec).
 - If it's ambiguous in a way that changes *what* gets built (not just how), ask the user now — don't
   delegate a guess.
+- **Check for a natural PR split** (per `CLAUDE.md`'s PR-breakdown preference): if the task has a
+  dependency-ordered shape — a DB schema/table change that other code relies on, or a `web-server`
+  API/response-shape change that `app/train_dashboard` depends on — say so now and suggest implementing
+  the dependency-free piece first as its own small, independently-mergeable change. A `BACKLOG.md`
+  entry's task-breakdown summary (if `/ideate` added one) often maps one line to one PR. Don't force a
+  split where the task is already one coherent, small unit.
 
 ## 2. Branch
 
@@ -63,7 +69,7 @@ cd app/train_dashboard && flutter analyze && flutter test   # only if Flutter fi
 If anything fails, feed the exact failure output back to the **same** agent (`SendMessage`, not a new
 spawn — it keeps context) and have it fix the cause. Loop until clean.
 
-## 5. Report — and hand off to review
+## 5. Report, then auto-run review
 
 ```
 ## Implemented
@@ -84,9 +90,10 @@ build: ✓   vet: ✓   test: ✓ (N tests)   [flutter analyze/test: ✓]
 <convention calls, assumptions, anything review should look at closely>
 ```
 
-Then **recommend `/review`** — don't run it yourself. The build gate here covers what a machine can
-check; the review pass is the human go/no-go before commit. Also remind the user that committing/
-pushing is their call, never automatic.
+Then **run `/review` automatically** on the change you just made (per `CLAUDE.md`'s workflow
+preference) — don't just recommend it. Skip this chaining only if the user explicitly said not to
+review this time. The build gate here covers what a machine can check; `/review` is the next lens.
+Also remind the user that committing/pushing is their call, never automatic.
 
 ## Notes
 

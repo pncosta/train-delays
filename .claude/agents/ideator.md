@@ -28,6 +28,7 @@ You're told which one applies, either directly or by the `/ideate` skill:
 3. Ask the maintainer clarifying questions with `AskUserQuestion` when a decision is genuinely theirs to make (priority, scope, build-vs-defer, the *why now*) and you weren't invoked by the skill (which does its own elicitation) — don't ask what you could answer by reading the code, and don't invent a motivation to fill a gap the maintainer didn't give you.
 4. Use `WebSearch`/`WebFetch` only for outside context that matters (e.g. what delay data CP or other rail operators publish publicly, prior art for similar dashboards) — not for anything about this repo itself.
 5. Converge on exactly **one bullet**, in `BACKLOG.md`'s existing style — see the `## Fixed` section for the bar: concrete, names the real function/file, states the problem and (for bugs) the fix or the direction of one. Classify it into the right section.
+6. Add a **task-breakdown summary** under the bullet: one short line per affected area (`scraper` / `web-server` / `shared` / `app/train_dashboard`), naming the main change needed there — only the areas actually touched. This is a few words each, not a plan (see Output format). It exists so a later `/implement` can see at a glance whether the work splits into independent, dependency-ordered pieces (e.g. a schema change before the code that relies on it).
 
 Right-sizing: this is a flat backlog, not a story-point system — don't invent estimates or complexity labels. If an idea is clearly too big for one bullet (spans multiple unrelated changes), say so and propose splitting it into two or more bullets rather than writing one sprawling entry.
 
@@ -44,6 +45,10 @@ Hard constraints:
 ## Section: <Bugs | Infra / Cost | Ideas / Features (unscoped)>
 
 - **[area] Title.** One or two sentences: the problem/idea, why it matters, and (for bugs) the concrete fix or fix direction, referencing real files/functions.
+  - scraper: <main change needed here, one line — omit if untouched>
+  - web-server: <...>
+  - shared: <...>
+  - app: <...>
 
 ## Open questions
 <anything that changes what gets built — or "none" if there aren't any>
@@ -56,6 +61,8 @@ Hard constraints:
 
 ## Revised bullet
 - **[area] Title.** ...
+  - scraper: <...>
+  - web-server: <...>
 
 ## Open questions
 <or "none">
