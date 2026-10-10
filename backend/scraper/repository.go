@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "github.com/tursodatabase/libsql-client-go/libsql" // New driver
@@ -55,7 +56,7 @@ func (c *DBClient) InitDB() error {
 }
 
 // inserts multiple trips in the DB with the same db connection
-func (c *DBClient) InsertEndingTrips(now time.Time, trips []Trip) error {
+func (c *DBClient) InsertCompletedTrips(now time.Time, trips []Trip) error {
 	db, err := sql.Open("libsql", c.dbConnectUrl)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
@@ -64,7 +65,7 @@ func (c *DBClient) InsertEndingTrips(now time.Time, trips []Trip) error {
 	defer db.Close()
 
 	for _, trip := range trips {
-		err = InsertEndingTrip(db, now, trip)
+		err = InsertCompletedTrip(db, now, trip)
 		if err != nil {
 			return err
 		}
@@ -72,40 +73,31 @@ func (c *DBClient) InsertEndingTrips(now time.Time, trips []Trip) error {
 	return nil
 }
 
-// InsertEndingTrip inserts or merges the arrival side of one Trip.
-//
-// The id is normally derived from the trip's own resolved arrival day, which matches
-// the departure day in the common case. But a trip whose departure and arrival are
-// captured in different cron runs can have those runs land on opposite sides of
-// midnight, so in the early morning we instead look up the still-open row this
-// train's departure was already stored under and reuse its id - see isEarlyMorning.
-func InsertEndingTrip(db *sql.DB, now time.Time, trip Trip) error {
+// InsertCompletedTrip inserts or merges one Trip that already has both its departure and
+// arrival side, which the per-train timetable endpoint always returns together atomically
+// once a trip is complete or cancelled - unlike the old per-station flow, there's no
+// scenario of two separate cron runs each writing half a trip, so there's no cross-run id
+// reconciliation needed here.
+func InsertCompletedTrip(db *sql.DB, now time.Time, trip Trip) error {
 	delay := 0
 	if trip.Delay != nil {
 		delay = *trip.Delay
 	}
 	cancelled := trip.Supression != nil
 
-	uid := fmt.Sprintf("%s-%d", resolveArrivalDay(trip, now), trip.TrainNumber)
-
-	if isEarlyMorning(now) {
-		openID, found, err := findOpenTripID(db, trip.TrainNumber, now)
-		if err != nil {
-			return err
-		}
-		if found {
-			uid = openID
-		}
-	}
+	uid := tripID(resolveArrivalDay(trip, now), trip.TrainNumber)
 
 	query := `
 		INSERT INTO trips (id, train_number, service_type,
 			origin_station, destination_station,
-			scheduled_arrival, actual_arrival,
+			scheduled_departure, scheduled_arrival,
+			actual_departure, actual_arrival,
 			delay_minutes, is_cancelled, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(id) DO UPDATE SET
 			updated_at = CURRENT_TIMESTAMP,
+			actual_departure = excluded.actual_departure,
+			scheduled_departure = excluded.scheduled_departure,
 			actual_arrival = excluded.actual_arrival,
 			scheduled_arrival = excluded.scheduled_arrival,
 			delay_minutes = excluded.delay_minutes,
@@ -113,14 +105,16 @@ func InsertEndingTrip(db *sql.DB, now time.Time, trip Trip) error {
 
 	_, err := db.Exec(query, uid, trip.TrainNumber, trip.TrainService.Code,
 		trip.TrainOrigin.Code, trip.TrainDestination.Code,
-		trip.ArrivalTime, trip.ETA, delay, cancelled)
+		trip.DepartureTime, trip.ArrivalTime,
+		trip.ETD, trip.ETA,
+		delay, cancelled)
 
 	return err
 }
 
 // resolveArrivalDay returns the calendar day (2006-01-02) the trip's arrival actually
-// happened on, preferring ETA over ArrivalTime to match filterEndingTrips' own
-// preference. Falls back to now's day if neither clock is present or parseable.
+// happened on, preferring ETA over ArrivalTime. Falls back to now's day if neither clock
+// is present or parseable.
 func resolveArrivalDay(trip Trip, now time.Time) string {
 	clock := trip.ArrivalTime
 	if trip.ETA != nil {
@@ -134,72 +128,69 @@ func resolveArrivalDay(trip Trip, now time.Time) string {
 	return now.Format("2006-01-02")
 }
 
-// findOpenTripID returns the id of the most recent trip row for trainNumber that has
-// a departure but no recorded arrival yet. A given train number only runs once every
-// 24h, so a still-open row older than that can't be today's departure - it's an
-// abandoned row from a previous day, and matching it would corrupt unrelated data.
-func findOpenTripID(db *sql.DB, trainNumber int, now time.Time) (string, bool, error) {
-	cutoff := now.Add(-24 * time.Hour).UTC().Format("2006-01-02 15:04:05")
-
-	var id string
-	err := db.QueryRow(`
-		SELECT id FROM trips
-		WHERE train_number = ? AND actual_arrival IS NULL AND created_at >= ?
-		ORDER BY created_at DESC
-		LIMIT 1;`, trainNumber, cutoff).Scan(&id)
-
-	if err == sql.ErrNoRows {
-		return "", false, nil
+// FindCapturedIDs reports which of todayIDs/yesterdayIDs already have a terminal row -
+// either an arrival recorded or marked cancelled (a cancelled trip has no arrival time to
+// record) - in a single batched query, one row read per already-captured id, rather than
+// one query per candidate train number, since Turso bills per row read.
+//
+// yesterdayIDs additionally require updated_at >= recentSince: a yesterday-id match can be
+// either a genuine midnight-spanning capture (always recent - it was written by a run that
+// just happened) or an unrelated ~24h-old capture of the same recurring train number run
+// the day before, and only the former should block polling today's actual trip. todayIDs
+// need no such filter since today's own id can never be stale across a day boundary.
+func (c *DBClient) FindCapturedIDs(todayIDs, yesterdayIDs []string, recentSince string) (map[string]bool, error) {
+	captured := map[string]bool{}
+	if len(todayIDs) == 0 && len(yesterdayIDs) == 0 {
+		return captured, nil
 	}
-	if err != nil {
-		return "", false, err
-	}
-	return id, true, nil
-}
 
-// inserts multiple trips in the DB with the same db connection
-func (c *DBClient) InsertStartingTrips(now time.Time, trips []Trip) error {
 	db, err := sql.Open("libsql", c.dbConnectUrl)
 	if err != nil {
-		return fmt.Errorf("failed to open database: %w", err)
+		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
-
 	defer db.Close()
 
-	for _, trip := range trips {
-		err = InsertStartingTrip(db, now, trip)
-		if err != nil {
-			return err
+	var conditions []string
+	var args []any
+
+	if len(todayIDs) > 0 {
+		conditions = append(conditions, fmt.Sprintf("id IN (%s)", placeholders(len(todayIDs))))
+		for _, id := range todayIDs {
+			args = append(args, id)
 		}
 	}
-	return nil
+	if len(yesterdayIDs) > 0 {
+		conditions = append(conditions, fmt.Sprintf("(id IN (%s) AND updated_at >= ?)", placeholders(len(yesterdayIDs))))
+		for _, id := range yesterdayIDs {
+			args = append(args, id)
+		}
+		args = append(args, recentSince)
+	}
+
+	query := fmt.Sprintf(`
+		SELECT id FROM trips
+		WHERE (actual_arrival IS NOT NULL OR is_cancelled = 1) AND (%s);`, strings.Join(conditions, " OR "))
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		captured[id] = true
+	}
+	return captured, rows.Err()
 }
 
-// InsertStartingTrip inserts or merges the departure side of one Trip, keyed by the
-// trip's own resolved departure day rather than a day shared across the whole run.
-func InsertStartingTrip(db *sql.DB, now time.Time, trip Trip) error {
-	day := now.Format("2006-01-02")
-	if trip.DepartureTime != nil {
-		if departure, err := resolveClockTime(*trip.DepartureTime, now); err == nil {
-			day = departure.Format("2006-01-02")
-		}
+func placeholders(n int) string {
+	p := make([]string, n)
+	for i := range p {
+		p[i] = "?"
 	}
-
-	uid := fmt.Sprintf("%s-%d", day, trip.TrainNumber)
-	query := `
-		INSERT INTO trips (id, train_number, service_type,
-			origin_station, destination_station,
-			scheduled_departure, actual_departure,
-			updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-		ON CONFLICT(id) DO UPDATE SET
-			updated_at = CURRENT_TIMESTAMP,
-			actual_departure = excluded.actual_departure,
-			scheduled_departure = excluded.scheduled_departure;`
-
-	_, err := db.Exec(query, uid, trip.TrainNumber, trip.TrainService.Code,
-		trip.TrainOrigin.Code, trip.TrainDestination.Code,
-		trip.DepartureTime, trip.ETD)
-
-	return err
+	return strings.Join(p, ",")
 }

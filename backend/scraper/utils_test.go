@@ -59,26 +59,3 @@ func TestResolveClockTime(t *testing.T) {
 		})
 	}
 }
-
-func TestIsEarlyMorning(t *testing.T) {
-	loc, _ := time.LoadLocation("Europe/Lisbon")
-
-	tests := []struct {
-		hour int
-		want bool
-	}{
-		{hour: 23, want: false}, // can never predate midnight, lookup is pointless
-		{hour: 0, want: true},
-		{hour: 1, want: true},
-		{hour: 5, want: true},
-		{hour: 6, want: false},
-		{hour: 10, want: false},
-	}
-
-	for _, tt := range tests {
-		now := time.Date(2026, 4, 5, tt.hour, 0, 0, 0, loc)
-		if got := isEarlyMorning(now); got != tt.want {
-			t.Errorf("isEarlyMorning(hour=%d) = %v, want %v", tt.hour, got, tt.want)
-		}
-	}
-}

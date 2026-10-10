@@ -5,15 +5,6 @@ import (
 	"time"
 )
 
-func Filter[T any](ss []T, test func(T) bool) (ret []T) {
-	for _, s := range ss {
-		if test(s) {
-			ret = append(ret, s)
-		}
-	}
-	return
-}
-
 // resolveClockTime turns a bare "HH:MM" clock string from the CP API into a full
 // timestamp, by picking whichever of {yesterday, today, tomorrow} + clock lands
 // closest to now. CP never tells us the calendar date of an event, only the time of
@@ -45,16 +36,4 @@ func resolveClockTime(clock string, now time.Time) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("could not parse clock time %q", clock)
 	}
 	return best, nil
-}
-
-// earlyMorningHours bounds how long after midnight an arrival can still plausibly
-// belong to a trip that departed - and was recorded - the previous calendar day.
-// An arrival captured late at night (e.g. 23:50) can never predate midnight, so this
-// risk is one-sided: only early-morning arrivals need the extra open-row lookup.
-// CP's longest routes run well under this many hours, so it's a safe bound without
-// having to run the lookup on every single ending-trip insert.
-const earlyMorningHours = 6
-
-func isEarlyMorning(now time.Time) bool {
-	return now.Hour() < earlyMorningHours
 }
