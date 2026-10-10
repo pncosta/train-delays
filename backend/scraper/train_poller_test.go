@@ -142,3 +142,47 @@ func TestTripDay(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveTripDay(t *testing.T) {
+	const today, yesterday = "2026-04-05", "2026-04-04"
+	strPtr := func(s string) *string { return &s }
+
+	tests := []struct {
+		name             string
+		trip             Trip
+		currentHour      int
+		retriedYesterday bool
+		want             string
+	}{
+		{
+			name:             "retried yesterday: trusts pollYesterday directly, ignoring departure hour",
+			trip:             Trip{DepartureTime: strPtr("20:00")},
+			currentHour:      23,
+			retriedYesterday: true,
+			want:             yesterday,
+		},
+		{
+			name:             "retried yesterday: still yesterday even at an hour that would flip tripDay's own guess",
+			trip:             Trip{DepartureTime: strPtr("20:00")},
+			currentHour:      5,
+			retriedYesterday: true,
+			want:             yesterday,
+		},
+		{
+			name:             "not retried: falls through to tripDay's hour-comparison",
+			trip:             Trip{DepartureTime: strPtr("23:50")},
+			currentHour:      1,
+			retriedYesterday: false,
+			want:             yesterday,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := resolveTripDay(tt.trip, today, yesterday, tt.currentHour, tt.retriedYesterday)
+			if got != tt.want {
+				t.Errorf("resolveTripDay() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

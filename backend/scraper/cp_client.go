@@ -127,14 +127,9 @@ func (e *apiStatusError) Error() string {
 // valid for this train (observed as HTTP 500 - confirmed via live testing against the
 // per-train timetable endpoint), as opposed to a different/transient failure.
 //
-// TODO(pedro): re-verify this against CP once the API is reachable again. These 500s were
-// observed during a session that had just hammered CP with a ~1950-request burst and got
-// rate-limited/blocked - confirm the 500 is really a calendar-validity response (e.g. the
-// "Train [N] not valid for date [D]" body) and not an artifact of that overload. If it's
-// not reliable, the retry-with-yesterday logic in pollTrains (train_poller.go) built on top
-// of this also has a known bug: it re-applies tripDay's hour-comparison to the retried
-// result instead of trusting pollYesterday directly, which can misattribute the row's day
-// for a train with multi-day gaps between valid dates. Deliberately left unfixed for now.
+// Confirmed against a non-overloaded CP (train 126, date 2026-10-10): the 500 body is
+// genuinely "Train [126] not valid for date [2026-10-10]" - this is a real calendar-validity
+// response, not an overload artifact from this project's earlier heavy test traffic.
 func isCalendarInvalidDate(err error) bool {
 	var apiErr *apiStatusError
 	if !errors.As(err, &apiErr) {

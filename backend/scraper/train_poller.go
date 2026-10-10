@@ -52,12 +52,14 @@ func pollTrains(ctx context.Context, cpClient *CPClient, dbClient *DBClient) err
 		pollYesterday := pollNow.AddDate(0, 0, -1).Format("2006-01-02")
 
 		timetable, err := cpClient.FetchTrainTimetable(ctx, trainNumber, pollToday)
+		retriedYesterday := false
 		if err != nil && isCalendarInvalidDate(err) {
 			// pollToday isn't a valid run date for this train (e.g. a weekday-only train
 			// polled just after midnight, where today is now the day it doesn't run) -
 			// retry once against yesterday before giving up on this train.
 			time.Sleep(pollPaceDelay)
 			timetable, err = cpClient.FetchTrainTimetable(ctx, trainNumber, pollYesterday)
+			retriedYesterday = true
 		}
 		if err != nil {
 			fmt.Printf("error fetching timetable for train %d: %v\n", trainNumber, err)
@@ -69,7 +71,7 @@ func pollTrains(ctx context.Context, cpClient *CPClient, dbClient *DBClient) err
 			continue
 		}
 
-		day := tripDay(trip.DepartureTime, pollToday, pollYesterday, pollNow.Hour())
+		day := resolveTripDay(trip, pollToday, pollYesterday, pollNow.Hour(), retriedYesterday)
 		trips[tripID(day, trainNumber)] = trip
 	}
 
@@ -82,6 +84,20 @@ func pollTrains(ctx context.Context, cpClient *CPClient, dbClient *DBClient) err
 
 func tripID(day string, trainNumber int) string {
 	return fmt.Sprintf("%s-%d", day, trainNumber)
+}
+
+// resolveTripDay picks which calendar day a trip's row belongs to. A successful
+// calendar-invalid-date retry already tells us the correct day - CP confirmed
+// pollYesterday is this train's valid date by accepting it after rejecting pollToday, so
+// there's nothing left to guess, and re-applying tripDay's hour-comparison to that result
+// could flip the answer depending on what hour the retry happened to land on. tripDay's
+// hour-comparison only applies on the primary (non-retried) path, where it resolves a
+// genuine midnight-crossing trip within an otherwise-valid day.
+func resolveTripDay(trip Trip, pollToday, pollYesterday string, currentHour int, retriedYesterday bool) string {
+	if retriedYesterday {
+		return pollYesterday
+	}
+	return tripDay(trip.DepartureTime, pollToday, pollYesterday, currentHour)
 }
 
 // tripDay picks which calendar day a trip's row belongs to by comparing its departure
