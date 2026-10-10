@@ -30,7 +30,8 @@ func getAndStoreTrips(ctx context.Context, cpClient *CPClient, dbClient *DBClien
 	for _, station := range shared.Stations {
 		trips, err := cpClient.FetchTrips(ctx, station.Code, oneHourAgo)
 		if err != nil {
-			return err
+			fmt.Printf("error fetching trips for station %s: %v", station.Code, err)
+			continue
 		}
 		// Filter out trips that START in current station - from those we want to store the staring time
 		startingTrips := filterStartingTrips(trips, nowLisbon, station.Code)
