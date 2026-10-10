@@ -14,66 +14,49 @@ var now = time.Now
 // the conservatively-assumed 2-3h CP retention window regardless of cron frequency.
 const pollPaceDelay = 1 * time.Second
 
-// yesterdayRecencyWindow bounds how old a yesterday-id capture can be and still count as
-// a genuine midnight-spanning capture rather than an unrelated ~24h-old run of the same
-// recurring train number. A real midnight-spanning capture is always recent (written by
-// the run that just observed it), while a same-recurring-train match from the day before
-// is always close to 24h old - 4h is comfortably wide enough to cover any gap between
-// cron runs plus the retention-window overlap, while nowhere near 24h.
-const yesterdayRecencyWindow = 4 * time.Hour
-
-// pollTrains polls CP's per-train timetable endpoint for every train not yet captured,
-// inserting whichever have reached a terminal state (completed or cancelled).
+// pollTrains polls CP's per-train timetable endpoint for every train CP runs, inserting
+// whichever have reached a terminal state (completed or cancelled).
+//
+// There's deliberately no "already captured" precheck here: CP calls are free (just
+// rate-limited, which pollPaceDelay already respects) while Turso DB reads are billed, so
+// re-polling and redundantly re-upserting an already-captured train (a harmless no-op via
+// ON CONFLICT DO UPDATE) is cheaper than spending a DB read to avoid it.
 //
 // 1 - Fetch the full list of train numbers CP runs
-// 2 - Drop whichever are already fully captured (today, or recently under yesterday's id for a late-night arrival captured just after midnight)
-// 3 - Poll the rest one at a time, paced, collecting any that are now complete/cancelled, and batch-write them all at the end
+// 2 - Poll each one at a time, paced, collecting any that are now complete/cancelled
+// 3 - Batch-write everything collected in one pass at the end
 func pollTrains(ctx context.Context, cpClient *CPClient, dbClient *DBClient) error {
 	lisbon, err := time.LoadLocation("Europe/Lisbon")
 	if err != nil {
 		return fmt.Errorf("error loading time location: %w", err)
 	}
-	nowLisbon := now().In(lisbon)
-	today := nowLisbon.Format("2006-01-02")
-	yesterday := nowLisbon.AddDate(0, 0, -1).Format("2006-01-02")
-	recentSince := nowLisbon.Add(-yesterdayRecencyWindow).UTC().Format("2006-01-02 15:04:05")
 
 	trains, err := cpClient.FetchTrains(ctx)
 	if err != nil {
 		return fmt.Errorf("error fetching train list: %w", err)
 	}
 
-	todayIDs, yesterdayIDs := candidateIDs(trains, today, yesterday)
-	captured, err := dbClient.FindCapturedIDs(todayIDs, yesterdayIDs, recentSince)
-	if err != nil {
-		return fmt.Errorf("error checking already-captured trains: %w", err)
-	}
-
-	var trips []Trip
-	polled := 0
-	for _, t := range trains {
+	trips := map[string]Trip{}
+	for i, t := range trains {
 		trainNumber := t.TrainNumber
-		if isCaptured(trainNumber, today, yesterday, captured) {
-			continue
-		}
 
-		if polled > 0 {
+		if i > 0 {
 			time.Sleep(pollPaceDelay)
 		}
-		polled++
 
-		// Re-derived from the current wall clock on every train, not the run-start
-		// snapshot above: a full run can take ~32 minutes, so by the time it reaches a
-		// given train the calendar day may have rolled over since today/yesterday were
-		// first computed.
-		pollToday := now().In(lisbon).Format("2006-01-02")
+		// Re-derived from the current wall clock on every train, not a run-start
+		// snapshot: a full run can take ~32 minutes, so by the time it reaches a given
+		// train the calendar day may have rolled over since the run started.
+		pollNow := now().In(lisbon)
+		pollToday := pollNow.Format("2006-01-02")
+		pollYesterday := pollNow.AddDate(0, 0, -1).Format("2006-01-02")
+
 		timetable, err := cpClient.FetchTrainTimetable(ctx, trainNumber, pollToday)
 		if err != nil && isCalendarInvalidDate(err) {
 			// pollToday isn't a valid run date for this train (e.g. a weekday-only train
 			// polled just after midnight, where today is now the day it doesn't run) -
 			// retry once against yesterday before giving up on this train.
 			time.Sleep(pollPaceDelay)
-			pollYesterday := now().In(lisbon).AddDate(0, 0, -1).Format("2006-01-02")
 			timetable, err = cpClient.FetchTrainTimetable(ctx, trainNumber, pollYesterday)
 		}
 		if err != nil {
@@ -85,10 +68,12 @@ func pollTrains(ctx context.Context, cpClient *CPClient, dbClient *DBClient) err
 		if !ready {
 			continue
 		}
-		trips = append(trips, trip)
+
+		day := tripDay(trip.DepartureTime, pollToday, pollYesterday, pollNow.Hour())
+		trips[tripID(day, trainNumber)] = trip
 	}
 
-	if err := dbClient.InsertCompletedTrips(nowLisbon, trips); err != nil {
+	if err := dbClient.InsertCompletedTrips(trips); err != nil {
 		return fmt.Errorf("error saving trips: %w", err)
 	}
 
@@ -99,23 +84,24 @@ func tripID(day string, trainNumber int) string {
 	return fmt.Sprintf("%s-%d", day, trainNumber)
 }
 
-// candidateIDs builds the today/yesterday precheck ids for each train - kept as separate
-// groups because FindCapturedIDs applies a recency filter to yesterdayIDs only.
-func candidateIDs(trains []TrainListEntry, today, yesterday string) (todayIDs, yesterdayIDs []string) {
-	todayIDs = make([]string, len(trains))
-	yesterdayIDs = make([]string, len(trains))
-	for i, t := range trains {
-		todayIDs[i] = tripID(today, t.TrainNumber)
-		yesterdayIDs[i] = tripID(yesterday, t.TrainNumber)
+// tripDay picks which calendar day a trip's row belongs to by comparing its departure
+// hour to the hour it was polled at: a departure hour later than the current hour could
+// only have happened yesterday, since it hasn't happened yet today. This is exact (no
+// guessing which of several candidate days is "closest") because a trip is always polled
+// shortly after CP marks it complete/cancelled, so its departure can only be today or
+// yesterday relative to the poll - never further back.
+func tripDay(departureTime *string, today, yesterday string, currentHour int) string {
+	if departureTime == nil {
+		return today
 	}
-	return todayIDs, yesterdayIDs
-}
-
-// isCaptured reports whether trainNumber already has a terminal row per the ids
-// FindCapturedIDs returned as captured - the recency filter on the yesterday id is
-// already baked into that result, so this just checks presence for either id.
-func isCaptured(trainNumber int, today, yesterday string, captured map[string]bool) bool {
-	return captured[tripID(today, trainNumber)] || captured[tripID(yesterday, trainNumber)]
+	departure, err := time.Parse("15:04", *departureTime)
+	if err != nil {
+		return today
+	}
+	if departure.Hour() > currentHour {
+		return yesterday
+	}
+	return today
 }
 
 // buildTrip extracts the origin/destination stops from a train's timetable and reports

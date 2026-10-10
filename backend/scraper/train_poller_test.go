@@ -97,58 +97,48 @@ func stationStub(code string) shared.StationInfo {
 	return shared.StationInfo{Code: code}
 }
 
-func TestIsCaptured(t *testing.T) {
-	const today, yesterday = "2026-10-10", "2026-10-09"
+func TestTripDay(t *testing.T) {
+	const today, yesterday = "2026-04-05", "2026-04-04"
+	strPtr := func(s string) *string { return &s }
 
 	tests := []struct {
-		name     string
-		captured map[string]bool
-		want     bool
+		name          string
+		departureTime *string
+		currentHour   int
+		want          string
 	}{
 		{
-			name:     "today's id captured",
-			captured: map[string]bool{tripID(today, 850): true},
-			want:     true,
+			name:          "midnight-crossing: departed 23:50, polled at 01:00 the next day belongs to yesterday",
+			departureTime: strPtr("23:50"),
+			currentHour:   1,
+			want:          yesterday,
 		},
 		{
-			name:     "yesterday's id captured (FindCapturedIDs already applied the recency filter)",
-			captured: map[string]bool{tripID(yesterday, 850): true},
-			want:     true,
+			name:          "same-day: departure hour at or before current hour belongs to today",
+			departureTime: strPtr("10:00"),
+			currentHour:   11,
+			want:          today,
 		},
 		{
-			name:     "neither id captured",
-			captured: map[string]bool{},
-			want:     false,
+			name:          "departure hour equal to current hour belongs to today",
+			departureTime: strPtr("10:30"),
+			currentHour:   10,
+			want:          today,
+		},
+		{
+			name:          "no departure time falls back to today",
+			departureTime: nil,
+			currentHour:   10,
+			want:          today,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isCaptured(850, today, yesterday, tt.captured)
+			got := tripDay(tt.departureTime, today, yesterday, tt.currentHour)
 			if got != tt.want {
-				t.Errorf("isCaptured() = %v, want %v", got, tt.want)
+				t.Errorf("tripDay() = %v, want %v", got, tt.want)
 			}
 		})
-	}
-}
-
-func TestCandidateIDs(t *testing.T) {
-	const today, yesterday = "2026-10-10", "2026-10-09"
-	trains := []TrainListEntry{{TrainNumber: 850}, {TrainNumber: 851}}
-
-	todayIDs, yesterdayIDs := candidateIDs(trains, today, yesterday)
-
-	wantToday := []string{tripID(today, 850), tripID(today, 851)}
-	wantYesterday := []string{tripID(yesterday, 850), tripID(yesterday, 851)}
-
-	for i, id := range wantToday {
-		if todayIDs[i] != id {
-			t.Errorf("candidateIDs() todayIDs[%d] = %v, want %v", i, todayIDs[i], id)
-		}
-	}
-	for i, id := range wantYesterday {
-		if yesterdayIDs[i] != id {
-			t.Errorf("candidateIDs() yesterdayIDs[%d] = %v, want %v", i, yesterdayIDs[i], id)
-		}
 	}
 }
