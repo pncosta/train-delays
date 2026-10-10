@@ -3,17 +3,14 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"net"
 	"io"
+	"net"
 	"net/http"
 	"time"
 	"train-delays/shared"
 )
-
-type TimetableResponse struct {
-	Trips []Trip `json:"stationStops"`
-}
 
 type Trip struct {
 	TrainNumber      int                `json:"trainNumber"`
@@ -22,11 +19,10 @@ type Trip struct {
 	TrainDestination shared.StationInfo `json:"trainDestination"`
 	ArrivalTime      *string            `json:"arrivalTime"`   // Can be null
 	DepartureTime    *string            `json:"departureTime"` // Can be null
-	Platform         string             `json:"platform"`
-	Delay            *int               `json:"delay"`      // The delay in minutes. can be null, can be 0 or a positive number
-	Supression       *Supression        `json:"supression"` // null if not cancelled
-	ETA              *string            `json:"ETA"`        // can be null - typically ArrivalTime + delay, but not always - in those cases not clear if delay or this has the real delay
-	ETD              *string            `json:"ETD"`        // can be null
+	Delay            *int               `json:"delay"`         // The delay in minutes. can be null, can be 0 or a positive number
+	Supression       *Supression        `json:"supression"`    // null if not cancelled
+	ETA              *string            `json:"ETA"`           // can be null - typically ArrivalTime + delay, but not always - in those cases not clear if delay or this has the real delay
+	ETD              *string            `json:"ETD"`           // can be null
 }
 
 type TrainServiceInfo struct {
@@ -37,6 +33,31 @@ type TrainServiceInfo struct {
 type Supression struct {
 	Code        string `json:"code"`
 	Designation string `json:"designation"`
+}
+
+// TrainListEntry is one entry of GET /cp/services/travel-api/trains. We only use the
+// train number - service/origin/destination come from the per-train timetable instead.
+type TrainListEntry struct {
+	TrainNumber int `json:"trainNumber"`
+}
+
+// TrainTimetable is the response of GET /cp/services/travel-api/trains/{trainNumber}/timetable/{date}.
+// Only origin/destination stops + top-level delay are captured - platform, lat/long,
+// occupancy, live per-stop delay, and intermediate stops are out of scope.
+type TrainTimetable struct {
+	ServiceCode TrainServiceInfo `json:"serviceCode"`
+	Status      *string          `json:"status"` // observed: null, AT_ORIGIN, IN_TRANSIT, AT_STATION, COMPLETED
+	Delay       *int             `json:"delay"`
+	TrainStops  []TrainStop      `json:"trainStops"`
+}
+
+type TrainStop struct {
+	Station    shared.StationInfo `json:"station"`
+	Arrival    *string            `json:"arrival"`
+	Departure  *string            `json:"departure"`
+	ETA        *string            `json:"ETA"`
+	ETD        *string            `json:"ETD"`
+	Supression *Supression        `json:"supression"`
 }
 
 // Client handles communication with the CP API
@@ -50,12 +71,12 @@ type CPClient struct {
 
 // NewCPClient initializes the CP client
 func NewCPClient(baseURL, apiKey, connectID, connectSecret string) *CPClient {
-    dialer := &net.Dialer{
+	dialer := &net.Dialer{
 		Timeout:   5 * time.Second,
 		KeepAlive: 30 * time.Second,
 	}
 	transport := &http.Transport{
-        DialContext:           dialer.DialContext,
+		DialContext:           dialer.DialContext,
 		TLSHandshakeTimeout:   5 * time.Second,
 		IdleConnTimeout:       90 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
@@ -67,20 +88,17 @@ func NewCPClient(baseURL, apiKey, connectID, connectSecret string) *CPClient {
 		ConnectSecret: connectSecret,
 		HTTPClient: &http.Client{
 			Transport: transport,
-            Timeout:   15 * time.Second,
+			Timeout:   15 * time.Second,
 		},
 	}
 }
 
-// FetchTimetable performs the HTTP GET and decodes the response
-func (c *CPClient) FetchTrips(ctx context.Context, stationID string, startTime time.Time) ([]Trip, error) {
-
-	date := startTime.Format("2006-01-02") // this seems to be mostly ignored by the API.. but still needed
-	startHour := startTime.Format("15:04")
-	endpoint := "cp/services/travel-api/stations"
-	url := fmt.Sprintf("%s/%s/%s/timetable/%s?start=%s", c.BaseURL, endpoint, stationID, date, startHour)
-
+// newRequest builds a GET request against the CP API with the headers every endpoint needs.
+func (c *CPClient) newRequest(ctx context.Context, url string) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	if err != nil {
+		return nil, fmt.Errorf("building request: %w", err)
+	}
 
 	req.Header.Set("x-api-key", c.ApiKey)
 	req.Header.Set("x-cp-connect-id", c.ConnectID)
@@ -88,29 +106,107 @@ func (c *CPClient) FetchTrips(ctx context.Context, stationID string, startTime t
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("Accept", "application/json")
-    req.Header.Set("Referer", "https://www.cp.pt/")
-    req.Header.Set("sec-ch-ua-platform", `"macOS"`)
+	req.Header.Set("Referer", "https://www.cp.pt/")
+	req.Header.Set("sec-ch-ua-platform", `"macOS"`)
+	return req, nil
+}
 
-//     start := time.Now()
+// apiStatusError carries the HTTP status and a body excerpt for a non-200 CP response, so
+// callers can distinguish specific failure conditions (e.g. the calendar-invalid-date 500)
+// from other errors instead of treating every failure the same way.
+type apiStatusError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *apiStatusError) Error() string {
+	return fmt.Sprintf("api returned status %d: %s", e.StatusCode, e.Body)
+}
+
+// isCalendarInvalidDate reports whether err is CP's signal that the requested date isn't
+// valid for this train (observed as HTTP 500 - confirmed via live testing against the
+// per-train timetable endpoint), as opposed to a different/transient failure.
+//
+// TODO(pedro): re-verify this against CP once the API is reachable again. These 500s were
+// observed during a session that had just hammered CP with a ~1950-request burst and got
+// rate-limited/blocked - confirm the 500 is really a calendar-validity response (e.g. the
+// "Train [N] not valid for date [D]" body) and not an artifact of that overload. If it's
+// not reliable, the retry-with-yesterday logic in pollTrains (train_poller.go) built on top
+// of this also has a known bug: it re-applies tripDay's hour-comparison to the retried
+// result instead of trusting pollYesterday directly, which can misattribute the row's day
+// for a train with multi-day gaps between valid dates. Deliberately left unfixed for now.
+func isCalendarInvalidDate(err error) bool {
+	var apiErr *apiStatusError
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+	return apiErr.StatusCode == http.StatusInternalServerError
+}
+
+func (c *CPClient) do(req *http.Request) (*http.Response, error) {
 	resp, err := c.HTTPClient.Do(req)
-// 	fmt.Printf("API call took: %s\n", time.Since(start))
-
 	if err != nil {
-		fmt.Printf("Error! %v\n", err)
 		return nil, fmt.Errorf("http error: %w", err)
 	}
-    defer func() {
-        io.Copy(io.Discard, resp.Body) // read any leftover bytes to reuse connection
-        resp.Body.Close()
-     }()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("api returned status %d", resp.StatusCode)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		resp.Body.Close()
+		return nil, &apiStatusError{StatusCode: resp.StatusCode, Body: string(body)}
+	}
+	return resp, nil
+}
+
+// FetchTrains fetches the static list of all train numbers CP runs.
+func (c *CPClient) FetchTrains(ctx context.Context) ([]TrainListEntry, error) {
+	url := fmt.Sprintf("%s/cp/services/travel-api/trains", c.BaseURL)
+
+	req, err := c.newRequest(ctx, url)
+	if err != nil {
+		return nil, err
 	}
 
-	var result TimetableResponse
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetching train list: %w", err)
+	}
+	defer func() {
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}()
+
+	var result []TrainListEntry
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("json decode error: %w", err)
 	}
 
-	return result.Trips, nil
+	return result, nil
+}
+
+// FetchTrainTimetable fetches a single train's timetable for the given date. date is a
+// calendar-validity gate (CP 500s for a date the train doesn't run), not a data selector -
+// once valid, the response reflects the train's current/most recent run regardless of
+// which valid date was passed.
+func (c *CPClient) FetchTrainTimetable(ctx context.Context, trainNumber int, date string) (*TrainTimetable, error) {
+	url := fmt.Sprintf("%s/cp/services/travel-api/trains/%d/timetable/%s", c.BaseURL, trainNumber, date)
+
+	req, err := c.newRequest(ctx, url)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetching timetable for train %d: %w", trainNumber, err)
+	}
+	defer func() {
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}()
+
+	var result TrainTimetable
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("json decode error: %w", err)
+	}
+
+	return &result, nil
 }
