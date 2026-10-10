@@ -10,6 +10,13 @@ Guidance for Claude Code when working in this repo. Applies on top of (not inste
   chaining only if the user explicitly says not to review this time.
 - **Always end `/implement` and `/review` with a files-changed/files-reviewed list** — a flat list of
   paths is enough; the user wants to skim it, not re-read the diff.
+- **`/review` auto-fixes cheap findings, no need to ask first.** A finding is cheap when the fix is
+  small, localized, and unambiguous (a copy/wording correction, a missing null/empty fallback, a
+  contrast/color tweak, a missing event handler, dead-code removal, deduplicating into an existing
+  helper) — severity label doesn't decide this, a MEDIUM finding can still be cheap. Send cheap findings
+  straight back to the `implementer`, re-verify the build, then report what was found and fixed. Only
+  ask first when a finding implies a real scope/design decision or the fix direction is genuinely
+  ambiguous.
 - **Prefer small, independently-mergeable, dependency-ordered PRs** over one large PR. When a task
   naturally splits into pieces with a dependency order, say so explicitly in the `/implement` report
   and suggest the split — don't silently bundle them:
