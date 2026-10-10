@@ -4,8 +4,9 @@ Dumping ground for ideas, known bugs, and improvements for pt-train-delays. Not 
 
 ## Bugs
 
-- **[scraper] DB connection opened/closed per insert batch.** `InsertCompletedTrips`/`FindCapturedIDs` in `backend/scraper/repository.go` call `sql.Open` + `defer Close()` every time - now just ~2 connections/run (down from ~100/run under the old per-station scraper), since the per-train poller batches into one write pass and one precheck query per run. Same class of issue as the HTTP client reuse fix already shipped for the CP API client (`a2bf6ae`) — just not applied to the DB side.
+- **[scraper] DB connection opened/closed per insert batch.** `InsertCompletedTrips` in `backend/scraper/repository.go` calls `sql.Open` + `defer Close()` every time - now just ~1 connection/run (down from ~100/run under the old per-station scraper), since the per-train poller batches into one write pass with no precheck query anymore. Same class of issue as the HTTP client reuse fix already shipped for the CP API client (`a2bf6ae`) — just not applied to the DB side.
 - **[scraper] Unchecked error from `http.NewRequestWithContext`** in `cp_client.go` — if it ever errors, the following `req.Header.Set` calls would panic on a nil `req`. Low likelihood, cheap to fix.
+- **[scraper] `isCalendarInvalidDate`'s 500-means-calendar-invalid assumption needs re-verifying against a non-overloaded CP.** These 500s were observed right after a session that had hammered CP with a ~1950-request burst and gotten rate-limited/blocked — Pedro wants to confirm, once CP's API is reachable again, that the 500 (`"Train [N] not valid for date [D]"`) is a genuine calendar-validity response and not an overload artifact. Tied to this: `pollTrains`' retry-with-yesterday logic (`train_poller.go`) re-applies `tripDay`'s hour-comparison to the retried result instead of trusting `pollYesterday` directly, which can misattribute the row's day for a train with multi-day gaps between valid dates (e.g. a weekday-only train querying over a weekend). Deliberately left unfixed pending the re-verification above — see the `TODO(pedro)` on `isCalendarInvalidDate` in `cp_client.go`.
 
 ## Infra / Cost
 
