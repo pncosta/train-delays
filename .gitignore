@@ -11,3 +11,4 @@ backend/shared/shared
 
 # per-machine Claude Code permissions, not shared project config
 .claude/settings.local.json
+.claude/.gh_token
