@@ -13,8 +13,6 @@ Dumping ground for ideas, known bugs, and improvements for pt-train-delays. Not 
 
 ## Ideas / Features (unscoped)
 
-- _(nothing logged yet — this is where ideator-agent output and brainstorms land)_
-
 ## Decisions
 
 - Pushing/committing always stays a human-confirmed step in the main session, never delegated to an autonomous agent.
