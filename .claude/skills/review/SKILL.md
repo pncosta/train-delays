@@ -84,11 +84,23 @@ path/to/file.go
 
 Keep it tight and actionable — the point is a clear go/no-go before commit, not a wall of text.
 
-## 5. Do not auto-fix
+## 5. Auto-fix cheap findings; ask about the rest
 
-This skill only reports. Applying fixes is a separate, explicit step the user asks for afterward —
-typically by sending the findings back to the `implementer` agent. Never edit files as part of
-`/review`.
+This skill never edits files itself — fixes always go back through the `implementer` agent, never
+inline here. But whether that handoff needs the user's go-ahead first depends on how cheap the fix is:
+
+- **Cheap finding → send it to `implementer` automatically, no need to ask first.** A finding is cheap
+  when the fix is small, localized, and unambiguous — a copy/wording correction, a missing null/empty
+  fallback, a contrast or color-value tweak, a missing event handler, removing dead code, deduplicating
+  a repeated calculation into an existing shared helper. Severity label doesn't decide this — a MEDIUM
+  finding can still be cheap (e.g. a mislabeled tooltip is a wording fix, not a redesign). After the
+  implementer reports back, independently re-verify the build same as any other `/implement` gate, then
+  tell the user what was found and fixed — report, don't ask permission retroactively either.
+- **Not-cheap finding → present it and ask before fixing.** A finding that implies a scope/design
+  decision, a non-obvious trade-off, a change to the approved plan, or where the right fix direction is
+  genuinely ambiguous, goes to the user first, same as before.
+
+When a review returns a mix, split it: auto-fix the cheap ones, ask only about the rest.
 
 ## Notes
 
