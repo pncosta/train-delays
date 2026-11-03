@@ -29,7 +29,7 @@ func main() {
 
 	cpClient := NewCPClient(env.cpBaseUrl, env.cpApiKey, env.cpClientID, env.cpClientSecret)
 
-	err = getAndStoreTrips(ctx, cpClient, dbClient)
+	err = pollTrains(ctx, cpClient, dbClient)
 	if err != nil {
 		log.Printf("scraper failed: %v", err)
 		os.Exit(1)
