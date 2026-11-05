@@ -75,10 +75,8 @@ func (c *DBClient) InsertEndingTrips(now time.Time, trips []Trip) error {
 // InsertEndingTrip inserts or merges the arrival side of one Trip.
 //
 // The id is normally derived from the trip's own resolved arrival day, which matches
-// the departure day in the common case. But a trip whose departure and arrival are
-// captured in different cron runs can have those runs land on opposite sides of
-// midnight, so in the early morning we instead look up the still-open row this
-// train's departure was already stored under and reuse its id - see isEarlyMorning.
+// the departure day in the common case. An early-morning arrival from a trip that
+// crossed midnight belongs to the previous day's row instead - see findPreviousDayTripID.
 func InsertEndingTrip(db *sql.DB, now time.Time, trip Trip) error {
 	delay := 0
 	if trip.Delay != nil {
@@ -88,14 +86,12 @@ func InsertEndingTrip(db *sql.DB, now time.Time, trip Trip) error {
 
 	uid := fmt.Sprintf("%s-%d", resolveArrivalDay(trip, now), trip.TrainNumber)
 
-	if isEarlyMorning(now) {
-		openID, found, err := findOpenTripID(db, trip.TrainNumber, now)
-		if err != nil {
-			return err
-		}
-		if found {
-			uid = openID
-		}
+	prevID, found, err := findPreviousDayTripID(db, trip, now)
+	if err != nil {
+		return err
+	}
+	if found {
+		uid = prevID
 	}
 
 	query := `
@@ -106,12 +102,12 @@ func InsertEndingTrip(db *sql.DB, now time.Time, trip Trip) error {
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(id) DO UPDATE SET
 			updated_at = CURRENT_TIMESTAMP,
-			actual_arrival = excluded.actual_arrival,
-			scheduled_arrival = excluded.scheduled_arrival,
+			actual_arrival = COALESCE(excluded.actual_arrival, trips.actual_arrival),
+			scheduled_arrival = COALESCE(excluded.scheduled_arrival, trips.scheduled_arrival),
 			delay_minutes = excluded.delay_minutes,
 			is_cancelled = excluded.is_cancelled;`
 
-	_, err := db.Exec(query, uid, trip.TrainNumber, trip.TrainService.Code,
+	_, err = db.Exec(query, uid, trip.TrainNumber, trip.TrainService.Code,
 		trip.TrainOrigin.Code, trip.TrainDestination.Code,
 		trip.ArrivalTime, trip.ETA, delay, cancelled)
 
@@ -119,14 +115,9 @@ func InsertEndingTrip(db *sql.DB, now time.Time, trip Trip) error {
 }
 
 // resolveArrivalDay returns the calendar day (2006-01-02) the trip's arrival actually
-// happened on, preferring ETA over ArrivalTime to match filterEndingTrips' own
-// preference. Falls back to now's day if neither clock is present or parseable.
+// happened on. Falls back to now's day if there is no parseable arrival clock.
 func resolveArrivalDay(trip Trip, now time.Time) string {
-	clock := trip.ArrivalTime
-	if trip.ETA != nil {
-		clock = trip.ETA
-	}
-	if clock != nil {
+	if clock := arrivalClock(trip); clock != nil {
 		if arrival, err := resolveClockTime(*clock, now); err == nil {
 			return arrival.Format("2006-01-02")
 		}
@@ -134,27 +125,42 @@ func resolveArrivalDay(trip Trip, now time.Time) string {
 	return now.Format("2006-01-02")
 }
 
-// findOpenTripID returns the id of the most recent trip row for trainNumber that has
-// a departure but no recorded arrival yet. A given train number only runs once every
-// 24h, so a still-open row older than that can't be today's departure - it's an
-// abandoned row from a previous day, and matching it would corrupt unrelated data.
-func findOpenTripID(db *sql.DB, trainNumber int, now time.Time) (string, bool, error) {
-	cutoff := now.Add(-24 * time.Hour).UTC().Format("2006-01-02 15:04:05")
+// findPreviousDayTripID returns the id of the row for the day before the trip's
+// resolved arrival day when that row is a midnight-crossing trip this arrival
+// completes. The row is looked up by id (a train runs at most once per 24h) rather than
+// by open/created_at state: rows are created early on their own day and keep receiving
+// arrival updates after midnight. Gated on the arrival clock, not now, because the
+// ending-trip window straddles midnight and the early-morning boundary.
+func findPreviousDayTripID(db *sql.DB, trip Trip, now time.Time) (string, bool, error) {
+	clock := arrivalClock(trip)
+	if clock == nil {
+		return "", false, nil
+	}
+	arrival, err := resolveClockTime(*clock, now)
+	if err != nil || !isEarlyMorning(arrival) {
+		return "", false, nil
+	}
 
-	var id string
-	err := db.QueryRow(`
-		SELECT id FROM trips
-		WHERE train_number = ? AND actual_arrival IS NULL AND created_at >= ?
-		ORDER BY created_at DESC
-		LIMIT 1;`, trainNumber, cutoff).Scan(&id)
+	id := fmt.Sprintf("%s-%d", arrival.AddDate(0, 0, -1).Format("2006-01-02"), trip.TrainNumber)
 
+	var departure sql.NullString
+	err = db.QueryRow(`SELECT scheduled_departure FROM trips WHERE id = ?;`, id).Scan(&departure)
 	if err == sql.ErrNoRows {
 		return "", false, nil
 	}
 	if err != nil {
 		return "", false, err
 	}
+	if !departure.Valid || !crossesMidnight(departure.String, *clock) {
+		return "", false, nil
+	}
 	return id, true, nil
+}
+
+// crossesMidnight reports whether arriving at the arrival clock after departing at the
+// departure clock must have wrapped past midnight. Zero-padded HH:MM compares lexically.
+func crossesMidnight(departure, arrival string) bool {
+	return departure > arrival
 }
 
 // inserts multiple trips in the DB with the same db connection
@@ -194,8 +200,8 @@ func InsertStartingTrip(db *sql.DB, now time.Time, trip Trip) error {
 		VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(id) DO UPDATE SET
 			updated_at = CURRENT_TIMESTAMP,
-			actual_departure = excluded.actual_departure,
-			scheduled_departure = excluded.scheduled_departure;`
+			actual_departure = COALESCE(excluded.actual_departure, trips.actual_departure),
+			scheduled_departure = COALESCE(excluded.scheduled_departure, trips.scheduled_departure);`
 
 	_, err := db.Exec(query, uid, trip.TrainNumber, trip.TrainService.Code,
 		trip.TrainOrigin.Code, trip.TrainDestination.Code,

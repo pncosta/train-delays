@@ -49,12 +49,21 @@ func resolveClockTime(clock string, now time.Time) (time.Time, error) {
 
 // earlyMorningHours bounds how long after midnight an arrival can still plausibly
 // belong to a trip that departed - and was recorded - the previous calendar day.
-// An arrival captured late at night (e.g. 23:50) can never predate midnight, so this
-// risk is one-sided: only early-morning arrivals need the extra open-row lookup.
+// An arrival clock late at night (e.g. 23:50) can never predate midnight, so this
+// risk is one-sided: only early-morning arrivals need the previous-day lookup.
 // CP's longest routes run well under this many hours, so it's a safe bound without
 // having to run the lookup on every single ending-trip insert.
 const earlyMorningHours = 6
 
-func isEarlyMorning(now time.Time) bool {
-	return now.Hour() < earlyMorningHours
+func isEarlyMorning(t time.Time) bool {
+	return t.Hour() < earlyMorningHours
+}
+
+// arrivalClock is the single choice of which clock represents a trip's arrival (ETA,
+// else scheduled ArrivalTime), shared so the row id and the window filter can't disagree.
+func arrivalClock(trip Trip) *string {
+	if trip.ETA != nil {
+		return trip.ETA
+	}
+	return trip.ArrivalTime
 }

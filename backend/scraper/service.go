@@ -86,23 +86,14 @@ func filterEndingTrips(trips []Trip, now time.Time, destinationStation string) [
 			return false
 		}
 
-		if t.ETA != nil {
-			if eta, err := resolveClockTime(*t.ETA, now); err == nil {
-				if eta.After(windowStart) && eta.Before(windowEnd) {
-					return true
-				}
-			}
+		clock := arrivalClock(t)
+		if clock == nil {
+			return false
 		}
-
-		if t.ArrivalTime != nil {
-			if arrival, err := resolveClockTime(*t.ArrivalTime, now); err == nil {
-				if arrival.After(windowStart) && arrival.Before(windowEnd) {
-					return true
-				}
-			}
+		arrival, err := resolveClockTime(*clock, now)
+		if err != nil {
+			return false
 		}
-
-		// either ETA and arrivaltime are nil OR both are too much in the future and trip can be igored
-		return false
+		return arrival.After(windowStart) && arrival.Before(windowEnd)
 	})
 }

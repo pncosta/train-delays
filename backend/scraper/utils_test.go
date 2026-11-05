@@ -82,3 +82,47 @@ func TestIsEarlyMorning(t *testing.T) {
 		}
 	}
 }
+
+func TestArrivalClock(t *testing.T) {
+	eta, sched := "00:05", "23:50"
+
+	tests := []struct {
+		name string
+		trip Trip
+		want *string
+	}{
+		{name: "ETA preferred", trip: Trip{ETA: &eta, ArrivalTime: &sched}, want: &eta},
+		{name: "falls back to scheduled", trip: Trip{ArrivalTime: &sched}, want: &sched},
+		{name: "neither", trip: Trip{}, want: nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := arrivalClock(tt.trip); got != tt.want {
+				t.Errorf("arrivalClock() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCrossesMidnight(t *testing.T) {
+	tests := []struct {
+		name      string
+		departure string
+		arrival   string
+		want      bool
+	}{
+		{name: "22:45 to 00:42 wraps", departure: "22:45", arrival: "00:42", want: true},
+		{name: "23:50 to 00:20 wraps", departure: "23:50", arrival: "00:20", want: true},
+		{name: "00:30 to 01:10 is its own day-D+1 trip", departure: "00:30", arrival: "01:10", want: false},
+		{name: "same-day trip", departure: "08:00", arrival: "10:00", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := crossesMidnight(tt.departure, tt.arrival); got != tt.want {
+				t.Errorf("crossesMidnight(%q, %q) = %v, want %v", tt.departure, tt.arrival, got, tt.want)
+			}
+		})
+	}
+}
