@@ -78,10 +78,6 @@ func (c *DBClient) InsertEndingTrips(now time.Time, trips []Trip) error {
 // the departure day in the common case. An early-morning arrival from a trip that
 // crossed midnight belongs to the previous day's row instead - see findPreviousDayTripID.
 func InsertEndingTrip(db *sql.DB, now time.Time, trip Trip) error {
-	delay := 0
-	if trip.Delay != nil {
-		delay = *trip.Delay
-	}
 	cancelled := trip.Supression != nil
 
 	uid := fmt.Sprintf("%s-%d", resolveArrivalDay(trip, now), trip.TrainNumber)
@@ -94,22 +90,23 @@ func InsertEndingTrip(db *sql.DB, now time.Time, trip Trip) error {
 		uid = prevID
 	}
 
+	// CP stops sending Delay once the train arrives; a nil Delay must not reset the stored one.
 	query := `
 		INSERT INTO trips (id, train_number, service_type,
 			origin_station, destination_station,
 			scheduled_arrival, actual_arrival,
 			delay_minutes, is_cancelled, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, 0), ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(id) DO UPDATE SET
 			updated_at = CURRENT_TIMESTAMP,
 			actual_arrival = COALESCE(excluded.actual_arrival, trips.actual_arrival),
 			scheduled_arrival = COALESCE(excluded.scheduled_arrival, trips.scheduled_arrival),
-			delay_minutes = excluded.delay_minutes,
+			delay_minutes = COALESCE(?, trips.delay_minutes),
 			is_cancelled = excluded.is_cancelled;`
 
 	_, err = db.Exec(query, uid, trip.TrainNumber, trip.TrainService.Code,
 		trip.TrainOrigin.Code, trip.TrainDestination.Code,
-		trip.ArrivalTime, trip.ETA, delay, cancelled)
+		trip.ArrivalTime, trip.ETA, trip.Delay, cancelled, trip.Delay)
 
 	return err
 }
