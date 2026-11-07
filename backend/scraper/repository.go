@@ -22,7 +22,7 @@ func NewDBClient(dbUrl string, dbToken string) *DBClient {
 	}
 }
 
-const tripsSchema = `
+var schemaStatements = []string{`
 CREATE TABLE IF NOT EXISTS trips (
 	id TEXT PRIMARY KEY,
 	train_number INTEGER,
@@ -37,7 +37,10 @@ CREATE TABLE IF NOT EXISTS trips (
 	is_cancelled BOOLEAN,
 	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);`
+);`,
+	// covering index for created_at-windowed aggregates per service_type
+	`CREATE INDEX IF NOT EXISTS idx_trips_optimized_summary ON trips (created_at, service_type, delay_minutes, is_cancelled);`,
+}
 
 func (c *DBClient) InitDB() error {
 	var err error
@@ -49,8 +52,16 @@ func (c *DBClient) InitDB() error {
 
 	defer db.Close()
 
-	_, err = db.Exec(tripsSchema)
-	return err
+	return applySchema(db)
+}
+
+func applySchema(db *sql.DB) error {
+	for _, stmt := range schemaStatements {
+		if _, err := db.Exec(stmt); err != nil {
+			return fmt.Errorf("failed to apply schema: %w", err)
+		}
+	}
+	return nil
 }
 
 // inserts multiple trips in the DB with the same db connection
