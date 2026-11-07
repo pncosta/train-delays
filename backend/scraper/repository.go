@@ -22,6 +22,23 @@ func NewDBClient(dbUrl string, dbToken string) *DBClient {
 	}
 }
 
+const tripsSchema = `
+CREATE TABLE IF NOT EXISTS trips (
+	id TEXT PRIMARY KEY,
+	train_number INTEGER,
+	service_type TEXT,
+	origin_station TEXT,
+	destination_station TEXT,
+	scheduled_departure TEXT,
+	scheduled_arrival TEXT,
+	actual_departure TEXT,
+	actual_arrival TEXT,
+	delay_minutes INTEGER,
+	is_cancelled BOOLEAN,
+	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);`
+
 func (c *DBClient) InitDB() error {
 	var err error
 	db, err := sql.Open("libsql", c.dbConnectUrl)
@@ -32,25 +49,7 @@ func (c *DBClient) InitDB() error {
 
 	defer db.Close()
 
-	// Create the schema if it doesn't exist
-	schema := `
-	CREATE TABLE IF NOT EXISTS trips (
-		id TEXT PRIMARY KEY,
-		train_number INTEGER,
-		service_type TEXT,
-		origin_station TEXT,
-		destination_station TEXT,
-		scheduled_departure TEXT,
-		scheduled_arrival TEXT,
-		actual_departure TEXT,
-		actual_arrival TEXT,
-		delay_minutes INTEGER,
-		is_cancelled BOOLEAN,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	);`
-
-	_, err = db.Exec(schema)
+	_, err = db.Exec(tripsSchema)
 	return err
 }
 
