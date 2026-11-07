@@ -20,7 +20,11 @@ permissions:
   id-token: 'write'
 
 jobs:
+  test:
+    uses: ./.github/workflows/backend-test.yaml
+
   deploy:
+    needs: test
     environment: production
     runs-on: ubuntu-latest
     steps:

@@ -1,14 +1,7 @@
 name: Backend tests
 on:
   pull_request:
-    paths:
-      - 'backend/**'
-      - '.github/workflows/backend-test.yaml'
-  push:
-    branches: [ main ]
-    paths:
-      - 'backend/**'
-      - '.github/workflows/backend-test.yaml'
+  workflow_call:
 
 permissions:
   contents: 'read'
