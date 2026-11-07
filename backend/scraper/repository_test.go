@@ -27,10 +27,19 @@ func newTestDB(t *testing.T) *sql.DB {
 	// each connection to :memory: is its own database
 	db.SetMaxOpenConns(1)
 	t.Cleanup(func() { db.Close() })
-	if _, err := db.Exec(tripsSchema); err != nil {
+	if err := applySchema(db); err != nil {
 		t.Fatal(err)
 	}
 	return db
+}
+
+func TestSchemaCreatesSummaryIndex(t *testing.T) {
+	db := newTestDB(t)
+	var name string
+	err := db.QueryRow(`SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_trips_optimized_summary'`).Scan(&name)
+	if err != nil {
+		t.Fatalf("summary index missing: %v", err)
+	}
 }
 
 func at(day, hour, min int) time.Time {
