@@ -1,0 +1,33 @@
+name: Backend tests
+on:
+  pull_request:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-test.yaml'
+  push:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-test.yaml'
+
+permissions:
+  contents: 'read'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.work
+          cache-dependency-path: |
+            backend/**/go.sum
+            backend/go.work.sum
+      # `./...` at the workspace root errors out; list the modules explicitly
+      - run: go build ./scraper/... ./web-server/... ./shared/...
+      - run: go vet ./scraper/... ./web-server/... ./shared/...
+      - run: go test ./scraper/... ./web-server/... ./shared/...
