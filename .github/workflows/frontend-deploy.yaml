@@ -1,0 +1,45 @@
+name: Deploy frontend (DEV)
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'frontend/**'
+      - 'firebase.json'
+      - '.firebaserc'
+      - '.github/workflows/frontend-deploy.yaml'
+
+permissions:
+  contents: 'read'
+  id-token: 'write'
+
+concurrency:
+  group: frontend-deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment: dev
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22 # Vite 8 needs Node 20.19+ or 22.12+
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build
+        working-directory: frontend
+        env:
+          # process env beats .env.production, so DEV needs no extra Vite mode
+          VITE_API_BASE_URL: https://backend-dev-qgxm6mwh3a-no.a.run.app
+        run: |
+          npm ci
+          npm run build
+      - id: 'auth'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: 'github-actions-sa@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com'
+      - name: Deploy to Firebase Hosting (dev)
+        run: npx --yes firebase-tools@15.35.0 deploy --only hosting:dev --project pt-train-delays --non-interactive

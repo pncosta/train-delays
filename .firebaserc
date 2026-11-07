@@ -1,0 +1,13 @@
+{
+  "projects": {
+    "default": "pt-train-delays"
+  },
+  "targets": {
+    "pt-train-delays": {
+      "hosting": {
+        "dev": ["pt-train-delays-dev"],
+        "prod": ["pt-train-delays"]
+      }
+    }
+  }
+}
