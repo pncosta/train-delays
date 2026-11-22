@@ -28,6 +28,9 @@ Always run, on any non-trivial change:
 - **review-correctness** — bugs, edge cases, data integrity, security. Covers both Go and Dart.
 - **review-engineering** — design/placement across `scraper`/`web-server`/`shared`/the app, Turso
   read-cost efficiency, API-contract fit with the Flutter app. Covers both Go and Dart.
+- **review-readability** — reads the change like a person new to it: deep nesting, unclear names,
+  dense one-liners, unexplained return values, single-use abstractions, premature optimization, code for
+  cases that can't happen — each with a simpler rewrite. Covers both Go and Dart.
 
 Run only when relevant:
 - **review-go** — only if the diff touches any `.go` file.
@@ -47,7 +50,8 @@ message, not one after another. Give each:
 - the changed-file list, and the diff (or tell it to derive it itself via `git diff`);
 - the instruction to stay within its lens and report via `ReportFindings`.
 
-Use the matching `subagent_type` (`review-correctness`, `review-engineering`, `review-go`). These
+Use the matching `subagent_type` (`review-correctness`, `review-engineering`, `review-readability`,
+`review-go`). These
 agents are read-only; they will not modify files.
 
 ## 4. Aggregate into one report
@@ -65,7 +69,7 @@ Present:
 ```
 ## Review summary
 <one-line gate: e.g. "2 blockers — fix before commit" or "No blocking issues.">
-Reviewers run: review-correctness, review-engineering[, review-go]   (skipped: review-go — no .go files changed)
+Reviewers run: review-correctness, review-engineering, review-readability[, review-go]   (skipped: review-go — no .go files changed)
 
 ## Files reviewed
 path/to/file.go

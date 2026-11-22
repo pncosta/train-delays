@@ -102,6 +102,38 @@ if err != nil {
 // happy path at the outer level
 ```
 
+## Code style: readability and simplicity
+
+Optimize for a person reading and debugging the code, not for fewer characters or a faster run —
+nothing in this project is time-critical.
+
+- **Descriptive names.** No single-letter names except loop counters (`i`, `j`, `k`), and no
+  non-standard abbreviations: `delay` not `d`, `stats` not `s`, `threshold` not `thr`. Standard ones
+  (`ctx`, `db`, `err`, `id`, `URL`) are fine.
+- **Plain control flow.** Simple loops and `if`s with named intermediate variables beat dense
+  one-liners. No multi-clause `for` headers doing date arithmetic, no `max`/`min` tricks on strings, no
+  function returning an unexplained `(value, bool)` — name the check instead.
+- **Simplicity over performance.** Prefer the version that's easiest to read and debug even if it does
+  a few more round trips or loops. Optimize only once a real cost or timeout problem shows up (Turso
+  bills rows read, not queries).
+- **Don't over-engineer.** Build for how the code actually runs. Check what the platform already
+  provides (Cloud Run job retries, Cloud Scheduler) before adding markers, resumability, batching or
+  retry logic, and don't handle cases that can't happen. Start with the plainest version that works and
+  add complexity only when a real need shows up.
+
+```go
+// bad
+for s := time.Date(f.Year(), f.Month(), 1, 0, 0, 0, 0, time.UTC); s.Format(l) < u; s = s.AddDate(0, 1, 0) {
+
+// good
+day := firstTripDate
+for day.Format(dayLayout) < today {
+	dayString := day.Format(dayLayout)
+	// ...
+	day = day.AddDate(0, 0, 1)
+}
+```
+
 ## Code structure: repository / service / handlers
 
 - **`repository.go`** is a thin facade over SQL: one function per basic operation (select, insert;
