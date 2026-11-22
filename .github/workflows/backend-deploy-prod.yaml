@@ -10,6 +10,10 @@ on:
         description: 'Deploy Scraper Job?'
         type: boolean
         default: true
+      deploy_rollup:
+        description: 'Deploy Rollup Job?'
+        type: boolean
+        default: true
       deploy_frontend:
         description: 'Deploy Frontend?'
         type: boolean
@@ -83,6 +87,18 @@ jobs:
             --source ./backend \
             --region europe-west1 \
             --env-vars-file backend/env.yaml \
+            --quiet
+
+      # Deploy Rollup (Job)
+      - name: 'Deploy Rollup Job (PROD)'
+        if: inputs.deploy_rollup
+        run: |  # rollup is in europe-west1
+          cp backend/rollup/Dockerfile backend/Dockerfile
+          gcloud run jobs deploy rollup-job-prod \
+            --source ./backend \
+            --region europe-west1 \
+            --env-vars-file backend/env.yaml \
+            --max-retries 3 \
             --quiet
 
       # Deploy Frontend (Firebase Hosting)

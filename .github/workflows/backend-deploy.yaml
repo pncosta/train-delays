@@ -10,6 +10,10 @@ on:
         description: 'Deploy Scraper Job?'
         type: boolean
         default: true
+      deploy_rollup:
+        description: 'Deploy Rollup Job?'
+        type: boolean
+        default: true
       reason:
         description: 'Why are we deploying?'
         required: false
@@ -19,6 +23,7 @@ on:
     paths:
       - 'backend/web-server/**'
       - 'backend/scraper/**'
+      - 'backend/rollup/**'
       - 'backend/shared/**'
 
 permissions:
@@ -68,4 +73,16 @@ jobs:
             --source ./backend \
             --region europe-west1 \
             --env-vars-file backend/env.yaml \
+            --quiet
+
+      # Deploy Rollup (Job)
+      - name: 'Deploy Rollup Job'
+        if: github.event_name == 'push' || inputs.deploy_rollup == true
+        run: |  # rollup is in europe-west1
+          cp backend/rollup/Dockerfile backend/Dockerfile
+          gcloud run jobs deploy rollup-job-dev \
+            --source ./backend \
+            --region europe-west1 \
+            --env-vars-file backend/env.yaml \
+            --max-retries 3 \
             --quiet

@@ -102,6 +102,27 @@ if err != nil {
 // happy path at the outer level
 ```
 
+## Code structure: repository / service / handlers
+
+- **`repository.go`** is a thin facade over SQL: one function per basic operation (select, insert;
+  a transaction that only runs writes is fine), SQL written inline and plain (no CTEs, subqueries, window
+  functions, or CASE-based rules), with no business rules, thresholds, aggregation, or loops beyond
+  scanning/writing. Rows are scanned into plain Go types (no `sql.Null*` leaking out).
+- Jobs never delete rows to make re-runs work: they insert with `ON CONFLICT DO NOTHING` (an existing
+  row means it was already processed). Recomputing is a manual delete.
+- Structs for well-known entities used across files (e.g. a `Widget`) go in **`models.go`**; a type only
+  one file uses stays in that file. Helper methods encoding business rules on them go in `service.go`, and
+  the repository never calls them.
+- **`service.go`** holds the business logic as plain functions, not methods on a struct. Each takes
+  everything it needs as parameters (`ctx`, the `*sql.DB`, `now`, ...), calls repository functions, and
+  does the computing and looping in Go, e.g. `summarizeWidgets(ctx, db, day)` calling `selectWidgets`.
+- **`handlers.go`** (HTTP services) parses/validates the request, calls the service, and maps errors to
+  responses. For a job, `main.go` plays this role: read env, open the DB once, call schema init (e.g.
+  `initSchema`) and the service directly as wiring, exit non-zero on failure.
+- Repeating a few lines is fine; don't add a type, helper or generic whose only job is to avoid that
+  repetition (e.g. a struct embedded in two others just to share two fields).
+- Applies to new code and to `rollup`; `scraper` and `web-server` predate it — migrate them only when asked.
+
 ## Logging
 
 - **Don't log the success/happy path** unless explicitly asked to. A job-completion heartbeat
