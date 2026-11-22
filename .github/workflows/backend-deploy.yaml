@@ -84,4 +84,5 @@ jobs:
             --source ./backend \
             --region europe-west1 \
             --env-vars-file backend/env.yaml \
+            --max-retries 3 \
             --quiet

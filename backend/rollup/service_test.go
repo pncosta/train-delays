@@ -226,24 +226,24 @@ func TestYesterdayToRollup(t *testing.T) {
 	}
 }
 
-func TestRollupYesterdayIfDue(t *testing.T) {
+func TestRollupYesterday(t *testing.T) {
 	db := newTestDB(t)
 	seed(t, db, arr("2026-11-06", 1, "IC", 9))
 	count := func() int { return len(dump(t, db, `SELECT 1 FROM daily_stats;`)) }
 
-	if err := rollupYesterdayIfDue(t.Context(), db, at(7, 3, 0)); err != nil || count() != 0 {
+	if err := rollupYesterday(t.Context(), db, at(7, 3, 0)); err != nil || count() != 0 {
 		t.Fatalf("rolled up before 04:00: err=%v rows=%d", err, count())
 	}
-	if err := rollupYesterdayIfDue(t.Context(), db, at(7, 4, 25)); err != nil || count() != 1 {
+	if err := rollupYesterday(t.Context(), db, at(7, 4, 25)); err != nil || count() != 1 {
 		t.Fatalf("not rolled up after 04:00: err=%v rows=%d", err, count())
 	}
-	// a late-added U trip only shows up if yesterday were recomputed
-	seed(t, db, arr("2026-11-06", 2, "U", 9))
-	if err := rollupYesterdayIfDue(t.Context(), db, at(7, 10, 0)); err != nil {
+	// a rerun ignores the conflict and keeps the existing row
+	seed(t, db, arr("2026-11-06", 2, "IC", 9))
+	if err := rollupYesterday(t.Context(), db, at(7, 10, 0)); err != nil {
 		t.Fatal(err)
 	}
-	if count() != 1 {
-		t.Errorf("already rolled-up day was recomputed")
+	if got := loadStats(t, db, "2026-11-06", "IC"); got.Trips != 1 {
+		t.Errorf("already rolled-up day was overwritten: %+v", got)
 	}
 }
 
@@ -332,7 +332,7 @@ func TestRollupZeroTripDayDoesNothing(t *testing.T) {
 	if err := rollupDay(t.Context(), db, "2026-11-06"); err != nil {
 		t.Fatal(err)
 	}
-	if err := rollupYesterdayIfDue(t.Context(), db, at(7, 5, 0)); err != nil {
+	if err := rollupYesterday(t.Context(), db, at(7, 5, 0)); err != nil {
 		t.Fatal(err)
 	}
 	if n := len(dump(t, db, `SELECT 1 FROM daily_stats;`)); n != 1 {

@@ -58,7 +58,7 @@ func run(backfill bool) error {
 		return nil
 	}
 
-	if err := rollupYesterdayIfDue(ctx, db, nowLisbon); err != nil {
+	if err := rollupYesterday(ctx, db, nowLisbon); err != nil {
 		return fmt.Errorf("error rolling up yesterday: %w", err)
 	}
 	log.Printf("rollup finished successfully - %s\n", env.env)

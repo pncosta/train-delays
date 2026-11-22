@@ -186,17 +186,10 @@ func rollupDay(ctx context.Context, db *sql.DB, day string) error {
 	return rollupRange(ctx, db, day, d.AddDate(0, 0, 1).Format(dayLayout))
 }
 
-// rollupYesterdayIfDue costs one marker read when yesterday is already rolled up.
-func rollupYesterdayIfDue(ctx context.Context, db *sql.DB, nowLisbon time.Time) error {
+// rollupYesterday rolls up yesterday once Lisbon time is past the overnight gap; reruns keep existing rows.
+func rollupYesterday(ctx context.Context, db *sql.DB, nowLisbon time.Time) error {
 	day, due := yesterdayToRollup(nowLisbon)
 	if !due {
-		return nil
-	}
-	done, err := dailyStatsExist(ctx, db, day)
-	if err != nil {
-		return err
-	}
-	if done {
 		return nil
 	}
 	return rollupDay(ctx, db, day)

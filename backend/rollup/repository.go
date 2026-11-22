@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 )
 
@@ -79,18 +78,6 @@ func selectMinTripID(ctx context.Context, db *sql.DB) (string, bool, error) {
 		return "", false, fmt.Errorf("failed to select min trip id: %w", err)
 	}
 	return minID.String, minID.Valid, nil
-}
-
-func dailyStatsExist(ctx context.Context, db *sql.DB, day string) (bool, error) {
-	var marker int
-	err := db.QueryRowContext(ctx, `SELECT 1 FROM daily_stats WHERE day = ? LIMIT 1;`, day).Scan(&marker)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("failed to read daily_stats for %s: %w", day, err)
-	}
-	return true, nil
 }
 
 // insertRollups writes a range's stats and worst trips in one transaction; rows that already exist are kept.
