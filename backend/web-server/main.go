@@ -29,6 +29,7 @@ func main() {
 		log.Printf("error connecting to DB %v\n", err)
 	}
 
+	// DBClient opens a connection per call and doesn't expose one, so the cached reads get their own persistent *sql.DB.
 	statsDB, err := sql.Open("libsql", fmt.Sprintf("%s?authToken=%s", env.dbUrl, env.dbToken))
 	if err != nil {
 		log.Panicf("failed to open database: %v", err)
@@ -64,7 +65,7 @@ func setupHandlers(ctx context.Context, env Env, dbClient *DBClient, statsDB *sq
 	h := &Handler{}
 	statsCache := newDayCache()
 	mux := &http.ServeMux{}
-	mux.HandleFunc("GET /api/stats/timeseries", h.handleTimeseries(statsDB, statsCache))
+	mux.HandleFunc("GET /api/stats/daily", h.handleDailyStats(statsDB, statsCache))
 	mux.HandleFunc("GET /api/stats/worst-trips", h.handleWorstTrips(statsDB, statsCache))
 	mux.HandleFunc("GET /api/stats/summary", h.handleSummary(ctx, "", dbClient))
 	mux.HandleFunc("GET /api/stats/worst", h.handleWorstDelays(ctx, "", dbClient))

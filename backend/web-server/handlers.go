@@ -106,46 +106,29 @@ func parseDayRange(query url.Values) (time.Time, time.Time, error) {
 	if to.Before(from) {
 		return time.Time{}, time.Time{}, errors.New("to must not be before from")
 	}
+	if to.After(from.AddDate(0, 0, maxRangeDays-1)) {
+		return time.Time{}, time.Time{}, fmt.Errorf("range is longer than %d days", maxRangeDays)
+	}
 	return from, to, nil
 }
 
-func validateGranularity(granularity string) error {
-	switch granularity {
-	case granularityDay, granularityWeek, granularityMonth:
-		return nil
-	}
-	return errors.New("granularity must be day, week or month")
-}
-
-func (h *Handler) handleTimeseries(db *sql.DB, cache *dayCache) http.HandlerFunc {
+func (h *Handler) handleDailyStats(db *sql.DB, cache *dayCache) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		query := r.URL.Query()
-		granularity := query.Get("granularity")
-		err := validateGranularity(granularity)
+		from, to, err := parseDayRange(r.URL.Query())
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		from, to, err := parseDayRange(query)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		// checked first so countPeriods never loops over an unbounded range
-		if rangeDays(from, to) > maxTimeseriesDays || countPeriods(from, to, granularity) > maxTimeseriesPoints {
-			http.Error(w, fmt.Sprintf("range has more than %d points, use a coarser granularity", maxTimeseriesPoints), http.StatusBadRequest)
 			return
 		}
 
-		response, err := getTimeseries(r.Context(), db, cache, time.Now(), from, to, granularity)
+		stats, err := getDailyStats(r.Context(), db, cache, time.Now(), from, to)
 		if err != nil {
-			log.Printf("error getting timeseries: %v", err)
+			log.Printf("error getting daily stats: %v", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		json.NewEncoder(w).Encode(stats)
 	}
 }
 
@@ -155,10 +138,6 @@ func (h *Handler) handleWorstTrips(db *sql.DB, cache *dayCache) http.HandlerFunc
 		from, to, err := parseDayRange(query)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if rangeDays(from, to) > maxWorstTripsRangeDays {
-			http.Error(w, fmt.Sprintf("range is longer than %d days", maxWorstTripsRangeDays), http.StatusBadRequest)
 			return
 		}
 

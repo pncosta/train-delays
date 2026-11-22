@@ -46,26 +46,23 @@ type LeaderboardEntry struct {
 	Count                  int     `json:"count"` // number of trips considered for the Value
 }
 
-// DailyStats mirrors a daily_stats row; the same type accumulates a period's totals.
+// DailyStats is a daily_stats row, sums and counts only so any period is an exact sum of days.
 type DailyStats struct {
-	Day         string
-	ServiceType string
-
-	Trips     int
-	Cancelled int
-	OnTime    int
-	Delayed   int
-
-	DelaySum   int
-	DelayCount int
-	MaxDelay   int
-
-	LateUpTo10 int
-	Late10To30 int
-	LateOver30 int
+	Day         string `json:"day"`
+	ServiceType string `json:"service_type"`
+	Trips       int    `json:"trips"`
+	Cancelled   int    `json:"cancelled"`
+	OnTime      int    `json:"on_time"`
+	Delayed     int    `json:"delayed"`
+	DelaySum    int    `json:"delay_sum"`
+	DelayCount  int    `json:"delay_count"`
+	LateUpTo10  int    `json:"late_up_to_10"`
+	Late10To30  int    `json:"late_10_30"`
+	LateOver30  int    `json:"late_over_30"`
+	MaxDelay    int    `json:"max_delay"`
 }
 
-// DailyWorstTrip mirrors a daily_worst_trips row; NULL columns come back as zero values.
+// DailyWorstTrip is a daily_worst_trips row; NULL columns come back as zero values.
 type DailyWorstTrip struct {
 	Day                    string `json:"day"`
 	ServiceType            string `json:"service_type"`
@@ -80,34 +77,11 @@ type DailyWorstTrip struct {
 	DelayMinutes           int    `json:"delay_minutes"`
 }
 
-type TimeseriesStats struct {
-	ServiceType string  `json:"service_type"`
-	Trips       int     `json:"trips"`
-	Cancelled   int     `json:"cancelled"`
-	OnTime      int     `json:"on_time"`
-	Delayed     int     `json:"delayed"`
-	AvgDelay    float64 `json:"avg_delay"`
-	LateUpTo10  int     `json:"late_up_to_10"`
-	Late10To30  int     `json:"late_10_30"`
-	LateOver30  int     `json:"late_over_30"`
-	MaxDelay    int     `json:"max_delay"`
-}
-
-type TimeseriesPeriod struct {
-	Period string            `json:"period"`
-	Stats  []TimeseriesStats `json:"stats"`
-}
-
-type TimeseriesResponse struct {
-	Granularity string             `json:"granularity"`
-	Periods     []TimeseriesPeriod `json:"periods"`
-}
-
 // summaryGroup is a count of trips sharing the same values of the columns /summary classifies on.
 type summaryGroup struct {
-	ServiceType  string
-	DelayMinutes *int
-	IsCancelled  bool
-	ArrivalSeen  bool
-	Count        int
+	ServiceType         string
+	DelayMinutes        *int
+	IsCancelled         bool
+	HasScheduledArrival bool
+	Count               int
 }

@@ -66,13 +66,17 @@ func selectSummaryGroups(db *sql.DB, days int) ([]summaryGroup, error) {
 	var groups []summaryGroup
 	for rows.Next() {
 		var group summaryGroup
-		err := rows.Scan(&group.ServiceType, &group.DelayMinutes, &group.IsCancelled, &group.ArrivalSeen, &group.Count)
+		err := rows.Scan(&group.ServiceType, &group.DelayMinutes, &group.IsCancelled, &group.HasScheduledArrival, &group.Count)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan summary group: %w", err)
 		}
 		groups = append(groups, group)
 	}
-	return groups, rows.Err()
+	err = rows.Err()
+	if err != nil {
+		return nil, fmt.Errorf("failed to iterate summary groups: %w", err)
+	}
+	return groups, nil
 }
 
 func selectDailyStats(ctx context.Context, db *sql.DB, fromDay, toDay string) ([]DailyStats, error) {
@@ -80,13 +84,14 @@ func selectDailyStats(ctx context.Context, db *sql.DB, fromDay, toDay string) ([
 		SELECT day, service_type, trips, cancelled, on_time, delayed, delay_sum, delay_count,
 		       late_up_to_10, late_10_30, late_over_30, max_delay
 		FROM daily_stats
-		WHERE day >= ? AND day <= ?;`, fromDay, toDay)
+		WHERE day >= ? AND day <= ?
+		ORDER BY day, service_type;`, fromDay, toDay)
 	if err != nil {
 		return nil, fmt.Errorf("failed to select daily_stats %s..%s: %w", fromDay, toDay, err)
 	}
 	defer rows.Close()
 
-	var stats []DailyStats
+	stats := []DailyStats{}
 	for rows.Next() {
 		var row DailyStats
 		err := rows.Scan(&row.Day, &row.ServiceType, &row.Trips, &row.Cancelled, &row.OnTime, &row.Delayed,
@@ -96,7 +101,11 @@ func selectDailyStats(ctx context.Context, db *sql.DB, fromDay, toDay string) ([
 		}
 		stats = append(stats, row)
 	}
-	return stats, rows.Err()
+	err = rows.Err()
+	if err != nil {
+		return nil, fmt.Errorf("failed to iterate daily_stats: %w", err)
+	}
+	return stats, nil
 }
 
 func selectDailyWorstTrips(ctx context.Context, db *sql.DB, fromDay, toDay string) ([]DailyWorstTrip, error) {
@@ -122,7 +131,11 @@ func selectDailyWorstTrips(ctx context.Context, db *sql.DB, fromDay, toDay strin
 		}
 		trips = append(trips, trip)
 	}
-	return trips, rows.Err()
+	err = rows.Err()
+	if err != nil {
+		return nil, fmt.Errorf("failed to iterate daily_worst_trips: %w", err)
+	}
+	return trips, nil
 }
 
 func (c *DBClient) GetWorstlDelays(ctx context.Context, days int, limit int) ([]Trip, error) {
