@@ -1,0 +1,30 @@
+# Build 
+FROM golang:1.25.9-alpine AS builder
+
+# Allow HTTPS connections
+RUN apk add --no-cache ca-certificates
+WORKDIR /app
+
+# 1. Copy the workspace and module files first
+COPY go.work ./
+COPY shared/go.mod ./shared/
+COPY web-server/go.mod ./web-server/
+COPY scraper/go.mod ./scraper/
+COPY rollup/go.mod ./rollup/
+
+# 2. Download dependencies
+RUN go mod download
+
+# 3. Copy the actual source code
+COPY rollup/ ./rollup/
+
+# 4. Build the specific binary
+WORKDIR /app/rollup
+RUN go build -o /main .
+
+
+# Run
+FROM alpine:latest
+RUN apk add --no-cache ca-certificates tzdata
+COPY --from=builder /main /main
+ENTRYPOINT ["./main"]

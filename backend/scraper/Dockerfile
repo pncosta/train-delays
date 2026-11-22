@@ -10,6 +10,7 @@ COPY go.work ./
 COPY shared/go.mod ./shared/
 COPY web-server/go.mod ./web-server/
 COPY scraper/go.mod ./scraper/
+COPY rollup/go.mod ./rollup/
 
 # 2. Download dependencies
 RUN go mod download
@@ -30,4 +31,4 @@ RUN apk add --no-cache ca-certificates tzdata
 COPY --from=builder /main /main
 # Use the PORT environment variable
 ENV PORT=8080
-ENTRYPOINT ["./main"]
+CMD ["./main"]

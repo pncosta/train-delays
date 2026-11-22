@@ -1,6 +1,7 @@
 go 1.25.9
 
 use (
+	./rollup
 	./scraper
 	./shared
 	./web-server

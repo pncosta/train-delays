@@ -13,7 +13,7 @@ Dumping ground for ideas, known bugs, and improvements for pt-train-delays. Not 
 
 ## Ideas / Features (unscoped)
 
-- **[web-server] Time-series and worst-trips endpoints over a lazy per-day cache (PR 2 of 3, depends on the scraper PR).**
+- **[web-server] Time-series and worst-trips endpoints over a lazy per-day cache (PR 2 of 3, depends on the rollup PR).**
   - **Endpoints:**
     - `GET /api/stats/timeseries?granularity=day|week|month&from&to` returns, per period per `service_type` plus a `TOTAL` entry (sum of the per-type counts): trips, cancelled, on_time, delayed, avg_delay (`delay_sum / delay_count`), the four band counts and max delay. Weeks are ISO (Mon-Sun) and labelled by their Monday date; months are calendar months. Points are capped at ~120.
     - `GET /api/stats/worst-trips?from&to&service_type` returns up to 10 trips (service_type optional, otherwise all types), ordered by `delay_minutes DESC, train_number`.
