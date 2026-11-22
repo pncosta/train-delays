@@ -102,6 +102,22 @@ if err != nil {
 // happy path at the outer level
 ```
 
+## Code structure: repository / service / handlers
+
+- **`repository.go`** is a thin facade over SQL: one function per basic operation (select, insert, delete;
+  a transaction that only runs writes is fine), SQL written inline and plain (no CTEs, subqueries, window
+  functions, or CASE-based rules), with no business rules, thresholds, aggregation, or loops beyond
+  scanning/writing. Rows are scanned into plain Go types (no `sql.Null*` leaking out).
+- The row/entity types the repository reads and writes are defined in `repository.go`; helper methods
+  encoding business rules on them go in `service.go`, and the repository never calls them.
+- **`service.go`** holds the business logic as plain functions, not methods on a struct. Each takes
+  everything it needs as parameters (`ctx`, the `*sql.DB`, `now`, ...), calls repository functions, and
+  does the computing and looping in Go, e.g. `summarizeWidgets(ctx, db, day)` calling `selectWidgets`.
+- **`handlers.go`** (HTTP services) parses/validates the request, calls the service, and maps errors to
+  responses. For a job, `main.go` plays this role: read env, open the DB once, call schema init (e.g.
+  `initSchema`) and the service directly as wiring, exit non-zero on failure.
+- Applies to new code and to `rollup`; `scraper` and `web-server` predate it — migrate them only when asked.
+
 ## Logging
 
 - **Don't log the success/happy path** unless explicitly asked to. A job-completion heartbeat

@@ -1,25 +1,46 @@
 package main
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"fmt"
-
-	_ "github.com/tursodatabase/libsql-client-go/libsql"
 )
 
-type DBClient struct {
-	dbConnectUrl string
+// trip mirrors a trips row; NULL columns are nil.
+type trip struct {
+	id                 string
+	trainNumber        *int
+	serviceType        *string
+	originStation      *string
+	destinationStation *string
+	scheduledArrival   *string
+	actualArrival      *string
+	delayMinutes       *int
+	isCancelled        *bool
 }
 
-func NewDBClient(dbUrl string, dbToken string) *DBClient {
-	return &DBClient{
-		dbConnectUrl: fmt.Sprintf("%s?authToken=%s", dbUrl, dbToken),
-	}
+type dayService struct {
+	day         string
+	serviceType string
 }
 
-var schemaStatements = []string{
+type dailyStats struct {
+	dayService
+	trips, cancelled, onTime, delayed, delaySum, delayCount int
+	lateUpTo10, late10To30, lateOver30, maxDelay            int
+}
+
+type worstTrip struct {
+	dayService
+	rank  int
+	trip  trip
+	delay int
+}
+
+func initSchema(ctx context.Context, db *sql.DB) error {
 	// sums and counts, never averages, so any period is an exact sum of days
-	`CREATE TABLE IF NOT EXISTS daily_stats (
+	_, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS daily_stats (
 	day TEXT NOT NULL,
 	service_type TEXT NOT NULL,
 	trips INTEGER NOT NULL,
@@ -33,9 +54,12 @@ var schemaStatements = []string{
 	late_over_30 INTEGER NOT NULL,
 	max_delay INTEGER NOT NULL,
 	PRIMARY KEY (day, service_type)
-);`,
+);`)
+	if err != nil {
+		return fmt.Errorf("failed to create daily_stats: %w", err)
+	}
 	// rank is the delay DESC, train_number ASC position within (day, service_type)
-	`CREATE TABLE IF NOT EXISTS daily_worst_trips (
+	_, err = db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS daily_worst_trips (
 	day TEXT NOT NULL,
 	service_type TEXT NOT NULL,
 	rank INTEGER NOT NULL,
@@ -47,24 +71,113 @@ var schemaStatements = []string{
 	actual_arrival TEXT,
 	delay_minutes INTEGER NOT NULL,
 	PRIMARY KEY (day, service_type, rank)
-);`,
-}
-
-func (c *DBClient) InitDB() error {
-	db, err := sql.Open("libsql", c.dbConnectUrl)
+);`)
 	if err != nil {
-		return fmt.Errorf("failed to open database: %w", err)
-	}
-	defer db.Close()
-
-	return applySchema(db)
-}
-
-func applySchema(db *sql.DB) error {
-	for _, stmt := range schemaStatements {
-		if _, err := db.Exec(stmt); err != nil {
-			return fmt.Errorf("failed to apply schema: %w", err)
-		}
+		return fmt.Errorf("failed to create daily_worst_trips: %w", err)
 	}
 	return nil
+}
+
+// selectTrips returns trips with id in [from, to).
+func selectTrips(ctx context.Context, db *sql.DB, from, to string) ([]trip, error) {
+	rows, err := db.QueryContext(ctx, `SELECT id, train_number, service_type, origin_station, destination_station,
+		scheduled_arrival, actual_arrival, delay_minutes, is_cancelled
+		FROM trips WHERE id >= ? AND id < ?;`, from, to)
+	if err != nil {
+		return nil, fmt.Errorf("failed to select trips for %s..%s: %w", from, to, err)
+	}
+	defer rows.Close()
+
+	var trips []trip
+	for rows.Next() {
+		var t trip
+		if err := rows.Scan(&t.id, &t.trainNumber, &t.serviceType, &t.originStation, &t.destinationStation,
+			&t.scheduledArrival, &t.actualArrival, &t.delayMinutes, &t.isCancelled); err != nil {
+			return nil, fmt.Errorf("failed to scan trip: %w", err)
+		}
+		trips = append(trips, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read trips for %s..%s: %w", from, to, err)
+	}
+	return trips, nil
+}
+
+// selectMinTripID reports false when trips is empty.
+func selectMinTripID(ctx context.Context, db *sql.DB) (string, bool, error) {
+	var minID sql.NullString
+	if err := db.QueryRowContext(ctx, `SELECT MIN(id) FROM trips;`).Scan(&minID); err != nil {
+		return "", false, fmt.Errorf("failed to select min trip id: %w", err)
+	}
+	return minID.String, minID.Valid, nil
+}
+
+func dailyStatsExist(ctx context.Context, db *sql.DB, day string) (bool, error) {
+	var marker int
+	err := db.QueryRowContext(ctx, `SELECT 1 FROM daily_stats WHERE day = ? LIMIT 1;`, day).Scan(&marker)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("failed to read daily_stats for %s: %w", day, err)
+	}
+	return true, nil
+}
+
+// replaceRollups atomically swaps the rollup rows for days in [from, to) with stats and worst.
+func replaceRollups(ctx context.Context, db *sql.DB, from, to string, stats []dailyStats, worst []worstTrip) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin rollup: %w", err)
+	}
+	defer tx.Rollback()
+
+	if err := deleteDailyStats(ctx, tx, from, to); err != nil {
+		return fmt.Errorf("failed to clear daily_stats: %w", err)
+	}
+	if err := deleteWorstTrips(ctx, tx, from, to); err != nil {
+		return fmt.Errorf("failed to clear daily_worst_trips: %w", err)
+	}
+	for _, s := range stats {
+		if err := insertDailyStats(ctx, tx, s); err != nil {
+			return fmt.Errorf("failed to insert daily_stats %s/%q: %w", s.day, s.serviceType, err)
+		}
+	}
+	for _, w := range worst {
+		if err := insertWorstTrip(ctx, tx, w); err != nil {
+			return fmt.Errorf("failed to insert daily_worst_trips %s/%q #%d: %w", w.day, w.serviceType, w.rank, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit rollup: %w", err)
+	}
+	return nil
+}
+
+func deleteDailyStats(ctx context.Context, tx *sql.Tx, from, to string) error {
+	_, err := tx.ExecContext(ctx, `DELETE FROM daily_stats WHERE day >= ? AND day < ?;`, from, to)
+	return err
+}
+
+func deleteWorstTrips(ctx context.Context, tx *sql.Tx, from, to string) error {
+	_, err := tx.ExecContext(ctx, `DELETE FROM daily_worst_trips WHERE day >= ? AND day < ?;`, from, to)
+	return err
+}
+
+func insertDailyStats(ctx context.Context, tx *sql.Tx, s dailyStats) error {
+	_, err := tx.ExecContext(ctx, `INSERT INTO daily_stats (day, service_type, trips, cancelled, on_time, delayed, delay_sum,
+		delay_count, late_up_to_10, late_10_30, late_over_30, max_delay)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+		s.day, s.serviceType, s.trips, s.cancelled, s.onTime, s.delayed, s.delaySum,
+		s.delayCount, s.lateUpTo10, s.late10To30, s.lateOver30, s.maxDelay)
+	return err
+}
+
+func insertWorstTrip(ctx context.Context, tx *sql.Tx, w worstTrip) error {
+	_, err := tx.ExecContext(ctx, `INSERT INTO daily_worst_trips (day, service_type, rank, trip_id, train_number,
+		origin_station, destination_station, scheduled_arrival, actual_arrival, delay_minutes)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+		w.day, w.serviceType, w.rank, w.trip.id, w.trip.trainNumber, w.trip.originStation,
+		w.trip.destinationStation, w.trip.scheduledArrival, w.trip.actualArrival, w.delay)
+	return err
 }

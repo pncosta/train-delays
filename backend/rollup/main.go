@@ -1,10 +1,15 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"time"
+
+	_ "github.com/tursodatabase/libsql-client-go/libsql"
 )
 
 type Env struct {
@@ -17,35 +22,47 @@ func main() {
 	backfill := flag.Bool("backfill", false, "roll up every past day in trips instead of only yesterday")
 	flag.Parse()
 
+	if err := run(*backfill); err != nil {
+		log.Print(err)
+		os.Exit(1)
+	}
+}
+
+// run exists so the DB is closed before main's os.Exit.
+func run(backfill bool) error {
 	env := readEnv()
 	log.Printf("Starting rollup on %s...\n", env.env)
 
-	dbClient := NewDBClient(env.dbUrl, env.dbToken)
-	err := dbClient.InitDB()
+	ctx := context.Background()
+	db, err := sql.Open("libsql", fmt.Sprintf("%s?authToken=%s", env.dbUrl, env.dbToken))
 	if err != nil {
-		log.Printf("error initing DB: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	defer db.Close()
+
+	if err := initSchema(ctx, db); err != nil {
+		return fmt.Errorf("error initing DB: %w", err)
 	}
 
-	if *backfill {
+	nowLisbon, err := lisbonNow(time.Now())
+	if err != nil {
+		return err
+	}
+
+	if backfill {
 		log.Printf("WARNING: BACKFILL MODE on %s - rebuilding daily rollups for all past days\n", env.env)
-		err = dbClient.BackfillRollups(time.Now())
-		if err != nil {
-			log.Printf("error backfilling rollups: %v", err)
-			os.Exit(1)
+		if err := backfillRollups(ctx, db, nowLisbon); err != nil {
+			return fmt.Errorf("error backfilling rollups: %w", err)
 		}
 		log.Printf("backfill finished successfully - %s\n", env.env)
-		os.Exit(0)
+		return nil
 	}
 
-	err = dbClient.RollupYesterdayIfDue(time.Now())
-	if err != nil {
-		log.Printf("error rolling up yesterday: %v", err)
-		os.Exit(1)
+	if err := rollupYesterdayIfDue(ctx, db, nowLisbon); err != nil {
+		return fmt.Errorf("error rolling up yesterday: %w", err)
 	}
-
 	log.Printf("rollup finished successfully - %s\n", env.env)
-	os.Exit(0)
+	return nil
 }
 
 func readEnv() Env {

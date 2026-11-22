@@ -83,7 +83,7 @@ func TestRollupThresholdsAndBands(t *testing.T) {
 		arr(day, 4, "IC", 5), arr(day, 5, "IC", 6), arr(day, 6, "IC", 10), arr(day, 7, "IC", 11),
 		arr(day, 8, "IC", 30), arr(day, 9, "IC", 31), arr(day, 10, "IC", 0),
 	)
-	if err := rollupDay(db, day); err != nil {
+	if err := rollupDay(t.Context(), db, day); err != nil {
 		t.Fatal(err)
 	}
 
@@ -110,7 +110,7 @@ func TestRollupNullDelayAndDepartureOnly(t *testing.T) {
 		seedTrip{id: day + "-2", svc: "R", train: 2, schedArr: nil, delay: nil, cancelled: nil},
 		seedTrip{id: day + "-3", svc: "R", train: 3, schedArr: nil, delay: ip(40), cancelled: 0},
 	)
-	if err := rollupDay(db, day); err != nil {
+	if err := rollupDay(t.Context(), db, day); err != nil {
 		t.Fatal(err)
 	}
 	got := loadStats(t, db, day, "R")
@@ -125,7 +125,7 @@ func TestRollupCancelledExcludedFromDelayMetrics(t *testing.T) {
 	cancelled := arr(day, 1, "IC", 50)
 	cancelled.cancelled = 1
 	seed(t, db, cancelled, arr(day, 2, "IC", 7))
-	if err := rollupDay(db, day); err != nil {
+	if err := rollupDay(t.Context(), db, day); err != nil {
 		t.Fatal(err)
 	}
 	got := loadStats(t, db, day, "IC")
@@ -144,11 +144,11 @@ func TestRollupIdempotent(t *testing.T) {
 	snapshot := func() [][]any {
 		return append(dump(t, db, `SELECT * FROM daily_stats ORDER BY 1, 2;`), dump(t, db, `SELECT * FROM daily_worst_trips ORDER BY 1, 2, 3;`)...)
 	}
-	if err := rollupDay(db, day); err != nil {
+	if err := rollupDay(t.Context(), db, day); err != nil {
 		t.Fatal(err)
 	}
 	first := snapshot()
-	if err := rollupDay(db, day); err != nil {
+	if err := rollupDay(t.Context(), db, day); err != nil {
 		t.Fatal(err)
 	}
 	if second := snapshot(); !reflect.DeepEqual(first, second) || len(first) == 0 {
@@ -168,7 +168,7 @@ func TestRollupWorstTripsOrderingTiesLimit(t *testing.T) {
 	cancelled.cancelled = 1
 	trips = append(trips, cancelled, arr(day, 200, "R", 7))
 	seed(t, db, trips...)
-	if err := rollupDay(db, day); err != nil {
+	if err := rollupDay(t.Context(), db, day); err != nil {
 		t.Fatal(err)
 	}
 
@@ -196,7 +196,7 @@ func TestRollupCountsMatchTrips(t *testing.T) {
 		seedTrip{id: "2026-11-05-9", svc: "AP", train: 9},
 		arr("2026-11-06", 1, "IC", 2),
 	)
-	if err := rollupRange(db, "2026-11-04", "2026-11-06"); err != nil {
+	if err := rollupRange(t.Context(), db, "2026-11-04", "2026-11-06"); err != nil {
 		t.Fatal(err)
 	}
 	for _, day := range []string{"2026-11-04", "2026-11-05"} {
@@ -231,15 +231,15 @@ func TestRollupYesterdayIfDue(t *testing.T) {
 	seed(t, db, arr("2026-11-06", 1, "IC", 9))
 	count := func() int { return len(dump(t, db, `SELECT 1 FROM daily_stats;`)) }
 
-	if err := rollupYesterdayIfDue(db, at(7, 3, 0)); err != nil || count() != 0 {
+	if err := rollupYesterdayIfDue(t.Context(), db, at(7, 3, 0)); err != nil || count() != 0 {
 		t.Fatalf("rolled up before 04:00: err=%v rows=%d", err, count())
 	}
-	if err := rollupYesterdayIfDue(db, at(7, 4, 25)); err != nil || count() != 1 {
+	if err := rollupYesterdayIfDue(t.Context(), db, at(7, 4, 25)); err != nil || count() != 1 {
 		t.Fatalf("not rolled up after 04:00: err=%v rows=%d", err, count())
 	}
 	// a late-added U trip only shows up if yesterday were recomputed
 	seed(t, db, arr("2026-11-06", 2, "U", 9))
-	if err := rollupYesterdayIfDue(db, at(7, 10, 0)); err != nil {
+	if err := rollupYesterdayIfDue(t.Context(), db, at(7, 10, 0)); err != nil {
 		t.Fatal(err)
 	}
 	if count() != 1 {
@@ -253,7 +253,7 @@ func TestBackfillRollups(t *testing.T) {
 		arr("2026-09-30", 1, "IC", 2), arr("2026-10-01", 1, "IC", 8), arr("2026-10-31", 1, "R", 8),
 		arr("2026-11-06", 1, "IC", 2), arr("2026-11-07", 1, "IC", 2),
 	)
-	if err := backfillRollups(db, at(7, 12, 0)); err != nil {
+	if err := backfillRollups(t.Context(), db, at(7, 12, 0)); err != nil {
 		t.Fatal(err)
 	}
 	days := dump(t, db, `SELECT day FROM daily_stats ORDER BY day, service_type;`)
@@ -272,7 +272,7 @@ func TestBackfillRespectsRollupHour(t *testing.T) {
 	} {
 		db := newTestDB(t)
 		seed(t, db, arr("2026-11-05", 1, "IC", 8), arr("2026-11-06", 1, "IC", 8), arr("2026-11-07", 1, "IC", 8))
-		if err := backfillRollups(db, tc.now); err != nil {
+		if err := backfillRollups(t.Context(), db, tc.now); err != nil {
 			t.Fatal(err)
 		}
 		var got []string
@@ -286,7 +286,7 @@ func TestBackfillRespectsRollupHour(t *testing.T) {
 }
 
 func TestBackfillEmptyTrips(t *testing.T) {
-	if err := backfillRollups(newTestDB(t), time.Now()); err != nil {
+	if err := backfillRollups(t.Context(), newTestDB(t), time.Now()); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -298,7 +298,7 @@ func TestRollupWorstTripsOnlyDelayed(t *testing.T) {
 		arr(day, 1, "IC", 5), arr(day, 2, "IC", 0), arr(day, 3, "IC", -4), arr(day, 4, "IC", 6),
 		arr(day, 5, "U", 3), arr(day, 6, "U", 4),
 	)
-	if err := rollupDay(db, day); err != nil {
+	if err := rollupDay(t.Context(), db, day); err != nil {
 		t.Fatal(err)
 	}
 	rows := dump(t, db, `SELECT service_type, rank, train_number FROM daily_worst_trips ORDER BY service_type, rank;`)
@@ -314,7 +314,7 @@ func TestRollupNullServiceType(t *testing.T) {
 	if _, err := db.Exec(`INSERT INTO trips (id, train_number, scheduled_arrival, delay_minutes, is_cancelled) VALUES (?, 1, '10:00', 9, 0);`, day+"-1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := rollupDay(db, day); err != nil {
+	if err := rollupDay(t.Context(), db, day); err != nil {
 		t.Fatal(err)
 	}
 	if got := loadStats(t, db, day, ""); got.Trips != 1 || got.Delayed != 1 {
@@ -325,17 +325,81 @@ func TestRollupNullServiceType(t *testing.T) {
 func TestRollupZeroTripDayDoesNothing(t *testing.T) {
 	db := newTestDB(t)
 	seed(t, db, arr("2026-11-05", 1, "IC", 9))
-	if err := rollupDay(db, "2026-11-05"); err != nil {
+	if err := rollupDay(t.Context(), db, "2026-11-05"); err != nil {
 		t.Fatal(err)
 	}
 	// existing rows for a day without trips are left alone, proving no DELETE ran
-	if err := rollupDay(db, "2026-11-06"); err != nil {
+	if err := rollupDay(t.Context(), db, "2026-11-06"); err != nil {
 		t.Fatal(err)
 	}
-	if err := rollupYesterdayIfDue(db, at(7, 5, 0)); err != nil {
+	if err := rollupYesterdayIfDue(t.Context(), db, at(7, 5, 0)); err != nil {
 		t.Fatal(err)
 	}
 	if n := len(dump(t, db, `SELECT 1 FROM daily_stats;`)); n != 1 {
 		t.Errorf("daily_stats rows = %d, want 1", n)
+	}
+}
+
+func eligibleTrip(id, svc string, train *int, delay int) trip {
+	return trip{id: id, serviceType: sp(svc), scheduledArrival: sp("10:00"), delayMinutes: ip(delay), trainNumber: train}
+}
+
+func TestBuildDailyStatsBoundaries(t *testing.T) {
+	tests := []struct {
+		svc    string
+		delays []int
+		want   dailyStats
+	}{
+		{"U", []int{3, 4, 10, 11, 30, 31}, dailyStats{trips: 6, onTime: 1, delayed: 5, delaySum: 89, delayCount: 6, lateUpTo10: 2, late10To30: 2, lateOver30: 1, maxDelay: 31}},
+		{"IC", []int{5, 6, 10, 11, 30, 31}, dailyStats{trips: 6, onTime: 1, delayed: 5, delaySum: 93, delayCount: 6, lateUpTo10: 2, late10To30: 2, lateOver30: 1, maxDelay: 31}},
+		{"IC", []int{-4, -2}, dailyStats{trips: 2, onTime: 2, delaySum: -6, delayCount: 2, maxDelay: -2}},
+	}
+	for _, tc := range tests {
+		var trips []trip
+		for i, d := range tc.delays {
+			trips = append(trips, eligibleTrip(fmt.Sprintf("2026-01-01-%d", i), tc.svc, nil, d))
+		}
+		tc.want.dayService = dayService{"2026-01-01", tc.svc}
+		got := buildDailyStats(trips)
+		if len(got) != 1 || got[0] != tc.want {
+			t.Errorf("%s %v: got %+v, want %+v", tc.svc, tc.delays, got, tc.want)
+		}
+	}
+}
+
+func TestBuildDailyStatsNoEligibleRows(t *testing.T) {
+	cancelled := trip{id: "2026-01-01-1", isCancelled: bp(true)}
+	got := buildDailyStats([]trip{cancelled})
+	want := []dailyStats{{dayService: dayService{"2026-01-01", ""}, trips: 1, cancelled: 1}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+}
+
+func TestBuildWorstTripsOrderAndCap(t *testing.T) {
+	n := func(v int) *int { return &v }
+	trips := []trip{
+		eligibleTrip("2026-01-01-b", "IC", n(2), 20),
+		eligibleTrip("2026-01-01-a", "IC", n(2), 20),
+		eligibleTrip("2026-01-01-c", "IC", n(1), 20),
+		eligibleTrip("2026-01-01-d", "IC", nil, 20),
+		eligibleTrip("2026-01-01-e", "IC", n(9), 40),
+		eligibleTrip("2026-01-01-f", "IC", n(9), 5),
+	}
+	var ids []string
+	for _, w := range buildWorstTrips(trips) {
+		ids = append(ids, w.trip.id[len(w.trip.id)-1:])
+	}
+	if want := []string{"e", "d", "c", "a", "b"}; !reflect.DeepEqual(ids, want) {
+		t.Errorf("order: got %v, want %v", ids, want)
+	}
+
+	var many []trip
+	for i := 0; i < 15; i++ {
+		many = append(many, eligibleTrip(fmt.Sprintf("2026-01-01-%02d", i), "IC", n(i), 10+i))
+	}
+	got := buildWorstTrips(many)
+	if len(got) != worstTripsPerGroup || got[0].rank != 1 || got[0].delay != 24 {
+		t.Errorf("cap: got %d rows, first %+v", len(got), got[0])
 	}
 }

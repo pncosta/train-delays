@@ -46,7 +46,7 @@ func newTestDB(t *testing.T) *sql.DB {
 	if _, err := db.Exec(tripsSchema); err != nil {
 		t.Fatal(err)
 	}
-	if err := applySchema(db); err != nil {
+	if err := initSchema(t.Context(), db); err != nil {
 		t.Fatal(err)
 	}
 	return db
@@ -55,6 +55,8 @@ func newTestDB(t *testing.T) *sql.DB {
 func at(day, hour, min int) time.Time {
 	return time.Date(2026, 11, day, hour, min, 0, 0, testLoc)
 }
+
+func bp(b bool) *bool { return &b }
 
 func sp(s string) *string { return &s }
 func ip(i int) *int       { return &i }
