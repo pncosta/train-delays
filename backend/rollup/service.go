@@ -36,6 +36,13 @@ func (t trip) service() string {
 	return *t.serviceType
 }
 
+func (t trip) trainNumberOrZero() int {
+	if t.trainNumber == nil {
+		return 0
+	}
+	return *t.trainNumber
+}
+
 func (t trip) cancelled() bool { return t.isCancelled != nil && *t.isCancelled }
 
 // Delay-eligible rows have an arrival side and aren't cancelled.
@@ -131,23 +138,13 @@ func buildWorstTrips(day string, trips []trip) []worstTrip {
 	return out
 }
 
-// Delay DESC, train_number ASC (NULL first, as in SQL), id ASC.
+// Delay DESC, then train number, then id, so the ranking is stable.
 func compareWorse(a, b trip) int {
-	if c := cmp.Compare(b.delay(), a.delay()); c != 0 {
-		return c
-	}
-	if (a.trainNumber == nil) != (b.trainNumber == nil) {
-		if a.trainNumber == nil {
-			return -1
-		}
-		return 1
-	}
-	if a.trainNumber != nil {
-		if c := cmp.Compare(*a.trainNumber, *b.trainNumber); c != 0 {
-			return c
-		}
-	}
-	return cmp.Compare(a.id, b.id)
+	return cmp.Or(
+		cmp.Compare(b.delay(), a.delay()),
+		cmp.Compare(a.trainNumberOrZero(), b.trainNumberOrZero()),
+		cmp.Compare(a.id, b.id),
+	)
 }
 
 func lisbonNow(t time.Time) (time.Time, error) {
