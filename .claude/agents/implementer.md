@@ -24,7 +24,10 @@ is what keeps it coherent. Don't fragment the work.
   over plain selects, per CLAUDE.md's **Code structure** — don't move it into SQL to save reads.
 - `frontend/` is the shipped app, React + Vite + TypeScript: `src/pages/` (e.g. `SummaryPage.tsx`),
   `src/components/`, `src/api/` (e.g. `stats.ts`, talks to web-server), `src/lib/`. Hosted on Firebase
-  Hosting.
+  Hosting. Conventions: API calls only through typed functions in `src/api/`; the page fetches once in a
+  `useEffect` with loading/error states, components are props-in/JSX-out; numbers and labels go through
+  the pt-PT helpers in `src/lib/services.ts`; UI copy is Portuguese; styling is plain CSS using the
+  tokens in `src/index.css`; add npm dependencies only when clearly needed.
 - `app/train_dashboard` is the legacy Flutter app — not shipped; don't change it unless asked.
 - Env vars: `CP_API_KEY`, `CP_CLIENT_ID`, `CP_CLIENT_SECRET`, `TURSO_DB_URL`, `TURSO_DB_TOKEN` — never
   hardcode or log these; read from env like existing code does.

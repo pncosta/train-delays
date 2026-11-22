@@ -1,6 +1,6 @@
 ---
 name: review
-description: Run the pt-train-delays multi-lens code review on the current change. Determines the diff, fans out to specialized reviewer subagents (review-correctness, review-engineering, and review-go when Go files changed) in parallel, then aggregates their findings into one prioritized report. Use before committing, or when the user asks to "review", "review my changes", or "run the review".
+description: Run the pt-train-delays multi-lens code review on the current change. Determines the diff, fans out to specialized reviewer subagents (review-correctness, review-engineering, review-readability, plus review-go when Go files changed and review-frontend when frontend/ changed) in parallel, then aggregates their findings into one prioritized report. Use before committing, or when the user asks to "review", "review my changes", or "run the review".
 ---
 
 # /review — multi-lens code review
@@ -34,11 +34,9 @@ Always run, on any non-trivial change:
 
 Run only when relevant:
 - **review-go** — only if the diff touches any `.go` file.
-
-There is no dedicated React/TypeScript idiom lens (`review-correctness`, `review-engineering` and
-`review-readability` still cover frontend changes, just not framework-specific idiom). If frontend
-changes are frequent and non-trivial, say so in your report as worth adding a `review-frontend` agent
-later, following the same template as `review-go`.
+- **review-frontend** — only if the diff touches anything under `frontend/`. React/TypeScript idiom and
+  this frontend's conventions: effects and fetching, state, keys, loading/error/empty states, typing of
+  API data, design tokens, Portuguese copy and pt-PT formatting, accessibility, new dependencies.
 
 If the change is trivial (formatting-only, a generated/vendored file touched as-is), say so and skip
 the review rather than spawning agents needlessly.
@@ -51,7 +49,7 @@ message, not one after another. Give each:
 - the instruction to stay within its lens and report via `ReportFindings`.
 
 Use the matching `subagent_type` (`review-correctness`, `review-engineering`, `review-readability`,
-`review-go`). These
+`review-go`, `review-frontend`). These
 agents are read-only; they will not modify files.
 
 ## 4. Aggregate into one report
@@ -69,7 +67,7 @@ Present:
 ```
 ## Review summary
 <one-line gate: e.g. "2 blockers — fix before commit" or "No blocking issues.">
-Reviewers run: review-correctness, review-engineering, review-readability[, review-go]   (skipped: review-go — no .go files changed)
+Reviewers run: review-correctness, review-engineering, review-readability[, review-go][, review-frontend]   (skipped: review-go — no .go files changed)
 
 ## Files reviewed
 path/to/file.go
