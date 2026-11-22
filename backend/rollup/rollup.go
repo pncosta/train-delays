@@ -9,12 +9,18 @@ import (
 
 const dayLayout = "2006-01-02"
 
+// Delayed is > urbanDelayedMinutes for urban trips and > defaultDelayedMinutes otherwise; late bands partition on that threshold.
+const (
+	urbanServiceType      = "U"
+	urbanDelayedMinutes   = 3
+	defaultDelayedMinutes = 5
+)
+
 // The overnight gap (last arrival ~02:52, first departure ~04:05) means yesterday is complete from 04:00.
 const rollupHour = 4
 
 // Worst trips are the delayed subset, so the list matches the delayed counter.
 // Delay-eligible rows have an arrival side and aren't cancelled; a NULL delay counts as 0.
-// Delayed is > 3 min for U and > 5 min for every other type; bands partition on that threshold.
 // Ids are YYYY-MM-DD-<train>, so the id range filter hits the PK index and day is the id prefix.
 const rollupBase = `
 WITH t AS (
@@ -30,7 +36,7 @@ WITH t AS (
 		COALESCE(is_cancelled, 0) AS cancelled,
 		scheduled_arrival IS NOT NULL AND COALESCE(is_cancelled, 0) = 0 AS eligible,
 		COALESCE(delay_minutes, 0) AS d,
-		CASE WHEN service_type = 'U' THEN 3 ELSE 5 END AS thr
+		CASE WHEN service_type = ? THEN ? ELSE ? END AS thr
 	FROM trips
 	WHERE id >= ? AND id < ?
 )`
@@ -96,10 +102,10 @@ func rollupRange(db *sql.DB, from, to string) error {
 			return fmt.Errorf("failed to clear %s: %w", table, err)
 		}
 	}
-	if _, err := tx.Exec(rollupStatsSQL, from, to); err != nil {
+	if _, err := tx.Exec(rollupStatsSQL, urbanServiceType, urbanDelayedMinutes, defaultDelayedMinutes, from, to); err != nil {
 		return fmt.Errorf("failed to roll up daily_stats: %w", err)
 	}
-	if _, err := tx.Exec(rollupWorstSQL, from, to); err != nil {
+	if _, err := tx.Exec(rollupWorstSQL, urbanServiceType, urbanDelayedMinutes, defaultDelayedMinutes, from, to); err != nil {
 		return fmt.Errorf("failed to roll up daily_worst_trips: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
