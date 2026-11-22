@@ -60,9 +60,8 @@ what you cover.
 - A query that fetches more rows than the caller uses, where a narrower `WHERE`/`LIMIT` would do. Don't
   recommend moving business logic into SQL to save reads — CLAUDE.md keeps logic in Go.
 
-**Simplicity & readability**
-- Code a reader can't follow at a glance (dense one-liners, unexplained `(value, bool)` returns,
-  single-letter or abbreviated names) — a real finding, not a nit.
+**Simplicity at the design level** (line-level readability — names, nesting, dense code — is
+`review-readability`'s lens)
 - Premature optimization or resilience: batching, markers, resumability or retry logic the platform
   already covers (Cloud Run job retries) or that no real cost/timeout problem calls for.
 - Code handling a case that can't happen, or mirroring old behaviour nothing depends on.
