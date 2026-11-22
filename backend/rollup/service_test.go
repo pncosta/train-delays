@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
-	"time"
 )
 
 type seedTrip struct {
@@ -218,44 +217,13 @@ func TestRollupCountsMatchTrips(t *testing.T) {
 	}
 }
 
-func TestYesterdayToRollup(t *testing.T) {
-	if _, ok := yesterdayToRollup(at(7, 3, 59)); ok {
-		t.Error("due before 04:00")
-	}
-	day, ok := yesterdayToRollup(at(7, 4, 0))
-	if !ok || day != "2026-11-06" {
-		t.Errorf("got %q %v, want 2026-11-06 true", day, ok)
-	}
-}
-
-func TestRollupYesterday(t *testing.T) {
-	db := newTestDB(t)
-	seed(t, db, arr("2026-11-06", 1, "IC", 9))
-	count := func() int { return len(dump(t, db, `SELECT 1 FROM daily_stats;`)) }
-
-	if err := rollupYesterday(t.Context(), db, at(7, 3, 0)); err != nil || count() != 0 {
-		t.Fatalf("rolled up before 04:00: err=%v rows=%d", err, count())
-	}
-	if err := rollupYesterday(t.Context(), db, at(7, 4, 25)); err != nil || count() != 1 {
-		t.Fatalf("not rolled up after 04:00: err=%v rows=%d", err, count())
-	}
-	// a rerun ignores the conflict and keeps the existing row
-	seed(t, db, arr("2026-11-06", 2, "IC", 9))
-	if err := rollupYesterday(t.Context(), db, at(7, 10, 0)); err != nil {
-		t.Fatal(err)
-	}
-	if got := loadStats(t, db, "2026-11-06", "IC"); got.Trips != 1 {
-		t.Errorf("already rolled-up day was overwritten: %+v", got)
-	}
-}
-
 func TestBackfillRollups(t *testing.T) {
 	db := newTestDB(t)
 	seed(t, db,
 		arr("2026-09-30", 1, "IC", 2), arr("2026-10-01", 1, "IC", 8), arr("2026-10-31", 1, "R", 8),
 		arr("2026-11-06", 1, "IC", 2), arr("2026-11-07", 1, "IC", 2),
 	)
-	if err := backfillRollups(t.Context(), db, at(7, 12, 0)); err != nil {
+	if err := backfillRollups(t.Context(), db, "2026-11-07"); err != nil {
 		t.Fatal(err)
 	}
 	days := dump(t, db, `SELECT day FROM daily_stats ORDER BY day, service_type;`)
@@ -264,31 +232,8 @@ func TestBackfillRollups(t *testing.T) {
 	}
 }
 
-func TestBackfillRespectsRollupHour(t *testing.T) {
-	for _, tc := range []struct {
-		now      time.Time
-		wantDays []string
-	}{
-		{at(7, 2, 0), []string{"2026-11-05"}},
-		{at(7, 5, 0), []string{"2026-11-05", "2026-11-06"}},
-	} {
-		db := newTestDB(t)
-		seed(t, db, arr("2026-11-05", 1, "IC", 8), arr("2026-11-06", 1, "IC", 8), arr("2026-11-07", 1, "IC", 8))
-		if err := backfillRollups(t.Context(), db, tc.now); err != nil {
-			t.Fatal(err)
-		}
-		var got []string
-		for _, row := range dump(t, db, `SELECT DISTINCT day FROM daily_stats ORDER BY day;`) {
-			got = append(got, row[0].(string))
-		}
-		if !reflect.DeepEqual(got, tc.wantDays) {
-			t.Errorf("at %v: backfilled days = %v, want %v", tc.now, got, tc.wantDays)
-		}
-	}
-}
-
 func TestBackfillEmptyTrips(t *testing.T) {
-	if err := backfillRollups(t.Context(), newTestDB(t), time.Now()); err != nil {
+	if err := backfillRollups(t.Context(), newTestDB(t), "2026-11-07"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -332,9 +277,6 @@ func TestRollupZeroTripDayDoesNothing(t *testing.T) {
 	}
 	// existing rows for a day without trips are left alone, proving no DELETE ran
 	if err := rollupDay(t.Context(), db, "2026-11-06"); err != nil {
-		t.Fatal(err)
-	}
-	if err := rollupYesterday(t.Context(), db, at(7, 5, 0)); err != nil {
 		t.Fatal(err)
 	}
 	if n := len(dump(t, db, `SELECT 1 FROM daily_stats;`)); n != 1 {

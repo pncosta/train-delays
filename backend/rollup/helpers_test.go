@@ -3,18 +3,9 @@ package main
 import (
 	"database/sql"
 	"testing"
-	"time"
 
 	_ "modernc.org/sqlite"
 )
-
-var testLoc = func() *time.Location {
-	loc, err := time.LoadLocation("Europe/Lisbon")
-	if err != nil {
-		panic(err)
-	}
-	return loc
-}()
 
 // trips is owned by the scraper; the rollup never creates it outside tests.
 const tripsSchema = `
@@ -50,10 +41,6 @@ func newTestDB(t *testing.T) *sql.DB {
 		t.Fatal(err)
 	}
 	return db
-}
-
-func at(day, hour, min int) time.Time {
-	return time.Date(2026, 11, day, hour, min, 0, 0, testLoc)
 }
 
 func bp(b bool) *bool { return &b }

@@ -142,14 +142,6 @@ func compareWorse(a, b trip) int {
 	return cmp.Compare(a.id, b.id)
 }
 
-// yesterdayToRollup returns the day to roll up once Lisbon time is past the overnight gap.
-func yesterdayToRollup(nowLisbon time.Time) (string, bool) {
-	if nowLisbon.Hour() < rollupHour {
-		return "", false
-	}
-	return nowLisbon.AddDate(0, 0, -1).Format(dayLayout), true
-}
-
 func lisbonNow(t time.Time) (time.Time, error) {
 	lisbon, err := time.LoadLocation("Europe/Lisbon")
 	if err != nil {
@@ -184,17 +176,8 @@ func rollupDay(ctx context.Context, db *sql.DB, day string) error {
 	return insertRollups(ctx, db, buildDailyStats(trips), buildWorstTrips(trips))
 }
 
-// rollupYesterday rolls up yesterday once Lisbon time is past the overnight gap; reruns keep existing rows.
-func rollupYesterday(ctx context.Context, db *sql.DB, nowLisbon time.Time) error {
-	day, due := yesterdayToRollup(nowLisbon)
-	if !due {
-		return nil
-	}
-	return rollupDay(ctx, db, day)
-}
-
-// backfillRollups rolls up every complete day in trips, one day per transaction (yesterday only from rollupHour).
-func backfillRollups(ctx context.Context, db *sql.DB, nowLisbon time.Time) error {
+// backfillRollups rolls up every day from the first trip up to (not including) today, one day per transaction.
+func backfillRollups(ctx context.Context, db *sql.DB, today string) error {
 	minID, found, err := selectMinTripID(ctx, db)
 	if err != nil {
 		return err
@@ -208,15 +191,8 @@ func backfillRollups(ctx context.Context, db *sql.DB, nowLisbon time.Time) error
 		return fmt.Errorf("failed to parse first trip day %q: %w", minID, err)
 	}
 
-	// Before rollupHour yesterday isn't complete yet, so stop before it instead of before today.
-	stopBeforeDate := nowLisbon
-	if _, due := yesterdayToRollup(nowLisbon); !due {
-		stopBeforeDate = nowLisbon.AddDate(0, 0, -1)
-	}
-	stopBeforeDay := stopBeforeDate.Format(dayLayout)
-
 	day := firstTripDate
-	for day.Format(dayLayout) < stopBeforeDay {
+	for day.Format(dayLayout) < today {
 		if err := rollupDay(ctx, db, day.Format(dayLayout)); err != nil {
 			return fmt.Errorf("backfill %s: %w", day.Format(dayLayout), err)
 		}

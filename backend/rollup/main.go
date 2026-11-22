@@ -33,6 +33,17 @@ func run(backfill bool) error {
 	env := readEnv()
 	log.Printf("Starting rollup on %s...\n", env.env)
 
+	nowLisbon, err := lisbonNow(time.Now())
+	if err != nil {
+		return err
+	}
+	if nowLisbon.Hour() < rollupHour {
+		log.Printf("before %02d:00 Lisbon yesterday isn't complete yet, nothing to do - %s\n", rollupHour, env.env)
+		return nil
+	}
+	today := nowLisbon.Format(dayLayout)
+	yesterday := nowLisbon.AddDate(0, 0, -1).Format(dayLayout)
+
 	ctx := context.Background()
 	db, err := sql.Open("libsql", fmt.Sprintf("%s?authToken=%s", env.dbUrl, env.dbToken))
 	if err != nil {
@@ -44,22 +55,17 @@ func run(backfill bool) error {
 		return fmt.Errorf("error initing DB: %w", err)
 	}
 
-	nowLisbon, err := lisbonNow(time.Now())
-	if err != nil {
-		return err
-	}
-
 	if backfill {
-		log.Printf("WARNING: BACKFILL MODE on %s - rebuilding daily rollups for all past days\n", env.env)
-		if err := backfillRollups(ctx, db, nowLisbon); err != nil {
+		log.Printf("WARNING: BACKFILL MODE on %s - filling in daily rollups for all past days\n", env.env)
+		if err := backfillRollups(ctx, db, today); err != nil {
 			return fmt.Errorf("error backfilling rollups: %w", err)
 		}
 		log.Printf("backfill finished successfully - %s\n", env.env)
 		return nil
 	}
 
-	if err := rollupYesterday(ctx, db, nowLisbon); err != nil {
-		return fmt.Errorf("error rolling up yesterday: %w", err)
+	if err := rollupDay(ctx, db, yesterday); err != nil {
+		return fmt.Errorf("error rolling up %s: %w", yesterday, err)
 	}
 	log.Printf("rollup finished successfully - %s\n", env.env)
 	return nil
