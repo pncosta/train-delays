@@ -25,20 +25,20 @@ Capture the list of changed files. If there are no changes, say so and stop.
 ## 2. Decide which reviewers to run
 
 Always run, on any non-trivial change:
-- **review-correctness** — bugs, edge cases, data integrity, security. Covers both Go and Dart.
-- **review-engineering** — design/placement across `scraper`/`web-server`/`shared`/the app, Turso
-  read-cost efficiency, API-contract fit with the Flutter app. Covers both Go and Dart.
+- **review-correctness** — bugs, edge cases, data integrity, security. Covers both Go and TypeScript.
+- **review-engineering** — design/placement across `scraper`/`rollup`/`web-server`/`shared`/`frontend`,
+  Turso read-cost efficiency, API-contract fit with the frontend. Covers both Go and TypeScript.
 - **review-readability** — reads the change like a person new to it: deep nesting, unclear names,
   dense one-liners, unexplained return values, single-use abstractions, premature optimization, code for
-  cases that can't happen — each with a simpler rewrite. Covers both Go and Dart.
+  cases that can't happen — each with a simpler rewrite. Covers both Go and TypeScript.
 
 Run only when relevant:
 - **review-go** — only if the diff touches any `.go` file.
 
-There is currently no dedicated Flutter/Dart idiom lens (`review-correctness`/`review-engineering`
-still cover Dart changes, just not Dart-specific idiom). If Dart changes are frequent and non-trivial,
-say so in your report as worth adding a `review-flutter` agent later, following the same template as
-`review-go`.
+There is no dedicated React/TypeScript idiom lens (`review-correctness`, `review-engineering` and
+`review-readability` still cover frontend changes, just not framework-specific idiom). If frontend
+changes are frequent and non-trivial, say so in your report as worth adding a `review-frontend` agent
+later, following the same template as `review-go`.
 
 If the change is trivial (formatting-only, a generated/vendored file touched as-is), say so and skip
 the review rather than spawning agents needlessly.

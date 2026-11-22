@@ -22,7 +22,7 @@ Guidance for Claude Code when working in this repo. Applies on top of (not inste
   and suggest the split — don't silently bundle them:
   - A DB schema change (e.g. a new column/table in `backend/*/repository.go`'s `InitDB`) is its own PR,
     and goes first if anything else depends on it.
-  - A `web-server` API/response-shape change is its own PR, and goes first if `app/train_dashboard`
+  - A `web-server` API/response-shape change is its own PR, and goes first if `frontend`
     needs it.
   - The task-breakdown summary on the `BACKLOG.md` entry (see below) is often the fastest way to see
     the natural split — one line in it is frequently one PR, though not always.
@@ -31,14 +31,14 @@ Guidance for Claude Code when working in this repo. Applies on top of (not inste
 
 Whenever `/ideate` drafts a new `BACKLOG.md` bullet or refines an existing one, append a short
 **task-breakdown summary**: one line per affected area, naming the main change needed there. Areas are
-`scraper` / `web-server` / `shared` / `app/train_dashboard` — only list the ones actually touched.
+`scraper` / `rollup` / `web-server` / `shared` / `frontend` — only list the ones actually touched.
 Keep each line to the essential change, not a plan:
 
 ```
 - **[area] Title.** ...the usual bullet...
   - scraper: add `X` field to the fetch/filter step.
   - web-server: expose `X` on the `/summary` response.
-  - app: render `X` on the trip card.
+  - frontend: render `X` on the summary page.
 ```
 
 This is intentionally small — a few words per area, not a task list. It's folded into `/ideate`'s
