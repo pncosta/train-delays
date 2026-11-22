@@ -47,3 +47,14 @@ func bp(b bool) *bool { return &b }
 
 func sp(s string) *string { return &s }
 func ip(i int) *int       { return &i }
+
+func loadStats(t *testing.T, db *sql.DB, day, svc string) statsRow {
+	t.Helper()
+	var r statsRow
+	err := db.QueryRow(`SELECT trips, cancelled, on_time, delayed, delay_sum, delay_count, late_up_to_10, late_10_30, late_over_30, max_delay FROM daily_stats WHERE day = ? AND service_type = ?;`, day, svc).
+		Scan(&r.Trips, &r.Cancelled, &r.OnTime, &r.Delayed, &r.DelaySum, &r.DelayCount, &r.L10, &r.L1030, &r.L30, &r.Max)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r
+}

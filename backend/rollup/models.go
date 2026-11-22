@@ -14,9 +14,21 @@ type trip struct {
 }
 
 type dailyStats struct {
-	day, serviceType                                        string
-	trips, cancelled, onTime, delayed, delaySum, delayCount int
-	lateUpTo10, late10To30, lateOver30, maxDelay            int
+	day         string
+	serviceType string
+
+	trips     int
+	cancelled int
+	onTime    int
+	delayed   int
+
+	delaySum   int
+	delayCount int
+	maxDelay   int
+
+	lateUpTo10 int
+	late10To30 int
+	lateOver30 int
 }
 
 type worstTrip struct {

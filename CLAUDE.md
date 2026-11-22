@@ -104,10 +104,12 @@ if err != nil {
 
 ## Code structure: repository / service / handlers
 
-- **`repository.go`** is a thin facade over SQL: one function per basic operation (select, insert, delete;
+- **`repository.go`** is a thin facade over SQL: one function per basic operation (select, insert;
   a transaction that only runs writes is fine), SQL written inline and plain (no CTEs, subqueries, window
   functions, or CASE-based rules), with no business rules, thresholds, aggregation, or loops beyond
   scanning/writing. Rows are scanned into plain Go types (no `sql.Null*` leaking out).
+- Jobs never delete rows to make re-runs work: they insert with `ON CONFLICT DO NOTHING` (an existing
+  row means it was already processed). Recomputing is a manual delete.
 - Structs for well-known entities used across files (e.g. a `Widget`) go in **`models.go`**; a type only
   one file uses stays in that file. Helper methods encoding business rules on them go in `service.go`, and
   the repository never calls them.

@@ -12,13 +12,16 @@ import (
 
 const dayLayout = "2006-01-02"
 
-// Late bands partition the delays above the delayed threshold.
 const (
 	urbanServiceType      = "U"
 	urbanDelayedMinutes   = 3
 	defaultDelayedMinutes = 5
-	lateBandShortMax      = 10
-	lateBandMediumMax     = 30
+)
+
+// Late bands partition the delays above the delayed threshold.
+const (
+	lateBandShortMax  = 10
+	lateBandMediumMax = 30
 )
 
 // The overnight gap (last arrival ~02:52, first departure ~04:05) means yesterday is complete from 04:00.
@@ -179,19 +182,23 @@ func backfillRollups(ctx context.Context, db *sql.DB, today string) error {
 	if err != nil {
 		return err
 	}
-	if !found || len(minID) < len(dayLayout) {
+	if !found {
 		return nil
+	}
+	if len(minID) < len(dayLayout) {
+		return fmt.Errorf("first trip id %q has no day prefix", minID)
 	}
 	firstTripDay := minID[:len(dayLayout)]
 	firstTripDate, err := time.Parse(dayLayout, firstTripDay)
 	if err != nil {
-		return fmt.Errorf("failed to parse first trip day %q: %w", minID, err)
+		return fmt.Errorf("failed to parse first trip day %q from id %q: %w", firstTripDay, minID, err)
 	}
 
 	day := firstTripDate
 	for day.Format(dayLayout) < today {
-		if err := rollupDay(ctx, db, day.Format(dayLayout)); err != nil {
-			return fmt.Errorf("backfill %s: %w", day.Format(dayLayout), err)
+		dayString := day.Format(dayLayout)
+		if err := rollupDay(ctx, db, dayString); err != nil {
+			return fmt.Errorf("backfill %s: %w", dayString, err)
 		}
 		day = day.AddDate(0, 0, 1)
 	}

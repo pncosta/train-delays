@@ -34,17 +34,6 @@ type statsRow struct {
 	Trips, Cancelled, OnTime, Delayed, DelaySum, DelayCount, L10, L1030, L30, Max int
 }
 
-func loadStats(t *testing.T, db *sql.DB, day, svc string) statsRow {
-	t.Helper()
-	var r statsRow
-	err := db.QueryRow(`SELECT trips, cancelled, on_time, delayed, delay_sum, delay_count, late_up_to_10, late_10_30, late_over_30, max_delay FROM daily_stats WHERE day = ? AND service_type = ?;`, day, svc).
-		Scan(&r.Trips, &r.Cancelled, &r.OnTime, &r.Delayed, &r.DelaySum, &r.DelayCount, &r.L10, &r.L1030, &r.L30, &r.Max)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return r
-}
-
 func dump(t *testing.T, db *sql.DB, query string) [][]any {
 	t.Helper()
 	rows, err := db.Query(query)
@@ -321,14 +310,13 @@ func TestBuildDailyStatsNoEligibleRows(t *testing.T) {
 }
 
 func TestBuildWorstTripsOrderAndCap(t *testing.T) {
-	n := func(v int) *int { return &v }
 	trips := []trip{
-		eligibleTrip("2026-01-01-b", "IC", n(2), 20),
-		eligibleTrip("2026-01-01-a", "IC", n(2), 20),
-		eligibleTrip("2026-01-01-c", "IC", n(1), 20),
+		eligibleTrip("2026-01-01-b", "IC", ip(2), 20),
+		eligibleTrip("2026-01-01-a", "IC", ip(2), 20),
+		eligibleTrip("2026-01-01-c", "IC", ip(1), 20),
 		eligibleTrip("2026-01-01-d", "IC", nil, 20),
-		eligibleTrip("2026-01-01-e", "IC", n(9), 40),
-		eligibleTrip("2026-01-01-f", "IC", n(9), 5),
+		eligibleTrip("2026-01-01-e", "IC", ip(9), 40),
+		eligibleTrip("2026-01-01-f", "IC", ip(9), 5),
 	}
 	var ids []string
 	for _, w := range buildWorstTrips("2026-01-01", trips) {
@@ -340,10 +328,13 @@ func TestBuildWorstTripsOrderAndCap(t *testing.T) {
 
 	var many []trip
 	for i := 0; i < 15; i++ {
-		many = append(many, eligibleTrip(fmt.Sprintf("2026-01-01-%02d", i), "IC", n(i), 10+i))
+		many = append(many, eligibleTrip(fmt.Sprintf("2026-01-01-%02d", i), "IC", ip(i), 10+i))
 	}
 	got := buildWorstTrips("2026-01-01", many)
-	if len(got) != worstTripsPerGroup || got[0].rank != 1 || got[0].delay != 24 {
-		t.Errorf("cap: got %d rows, first %+v", len(got), got[0])
+	if len(got) != worstTripsPerGroup {
+		t.Fatalf("cap: got %d rows, want %d", len(got), worstTripsPerGroup)
+	}
+	if got[0].rank != 1 || got[0].delay != 24 {
+		t.Errorf("cap: first %+v", got[0])
 	}
 }
