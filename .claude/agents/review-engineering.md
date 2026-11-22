@@ -36,10 +36,11 @@ what you cover.
   `lib/models/` depend on `web-server`'s response shapes. A backend change that alters a response shape
   without a corresponding app-side update is a contract break, even if each side looks fine in
   isolation.
-- **House style** (also in top-level CLAUDE/system instructions, but worth restating as your rubric):
-  simple over clever, no speculative abstraction, no interface/wrapper type with a single
-  implementation, three similar lines beats a premature helper, YAGNI. This is a tiny pet project —
-  weigh over-engineering as seriously as under-engineering.
+- **House style** — CLAUDE.md's **Code style** and **Code structure** sections are your rubric:
+  readable over clever, simplicity over performance, no over-engineering, no speculative abstraction,
+  repeating a few lines beats a premature helper, logic in Go rather than SQL, the repository / models /
+  service / handlers layering. This is a tiny pet project — weigh over-engineering as seriously as
+  under-engineering.
 
 ## What to hunt for
 
@@ -56,8 +57,15 @@ what you cover.
 **Cost & efficiency (Turso)**
 - Any new per-item query inside a loop (N+1).
 - Any new code path whose read volume scales with request/user count rather than with data size.
-- A query that fetches more columns/rows than the caller uses, where a narrower query or an aggregate
-  (`COUNT`, `SUM`, a `WHERE`/`LIMIT`) would do.
+- A query that fetches more rows than the caller uses, where a narrower `WHERE`/`LIMIT` would do. Don't
+  recommend moving business logic into SQL to save reads — CLAUDE.md keeps logic in Go.
+
+**Simplicity & readability**
+- Code a reader can't follow at a glance (dense one-liners, unexplained `(value, bool)` returns,
+  single-letter or abbreviated names) — a real finding, not a nit.
+- Premature optimization or resilience: batching, markers, resumability or retry logic the platform
+  already covers (Cloud Run job retries) or that no real cost/timeout problem calls for.
+- Code handling a case that can't happen, or mirroring old behaviour nothing depends on.
 
 **Contract & evolution**
 - A `web-server` response-shape change not mirrored in `app/train_dashboard`'s models/API client (flag

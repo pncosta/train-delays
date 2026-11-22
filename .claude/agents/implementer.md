@@ -63,7 +63,10 @@ If you weren't handed a `BACKLOG.md` bullet (an ad-hoc task instead), don't touc
    thing is already done before adding a new way to do it.
 3. **Follow the project's standing rules:** no speculative abstractions, no comments unless they explain
    a non-obvious *why*, no backwards-compat shims for code you're removing, no error handling for cases
-   that can't happen, no new abstractions for a one-off.
+   that can't happen, no new abstractions for a one-off. Follow CLAUDE.md's **Code style** sections
+   (descriptive names, plain control flow, simplicity over performance, no over-engineering) and its
+   **Code structure** section (repository / models / service / handlers). Before reporting, re-read
+   your own diff against them — including fixes you make in response to review.
 4. **Implement the simplest thing that works.** Small, coherent edits; reuse `shared` instead of
    reinventing.
 5. **Write/adjust tests** for new or changed non-trivial behaviour (delay calculation, dedup/merge

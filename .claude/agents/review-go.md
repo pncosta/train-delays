@@ -63,6 +63,11 @@ only in passing if at all, and focus on the non-mechanical idiom below.
   repository method not matching the `InsertXxx`/`FetchXxx` verb convention already in use).
 - A new abstraction (interface, wrapper type) with a single implementation/caller — Go idiom (and this
   project's house style) favors concrete types until a second real implementation exists.
+- Readability per CLAUDE.md's **Code style: readability and simplicity**: single-letter names outside
+  loop counters, non-standard abbreviations, dense multi-clause `for` headers, `max`/`min` tricks, a
+  `(value, bool)` return whose bool isn't obvious from the name. Treat these as findings, not nits.
+- Layering per CLAUDE.md's **Code structure**: business rules in `repository.go`, SQL in `service.go`,
+  shared entity structs outside `models.go`.
 
 **Tests**
 - New/changed non-trivial logic (delay calculation, dedup/merge logic, date resolution) with no test,
