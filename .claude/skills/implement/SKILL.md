@@ -25,7 +25,7 @@ open an editor, stop and spawn the agent instead.
   delegate a guess.
 - **Check for a natural PR split** (per `CLAUDE.md`'s PR-breakdown preference): if the task has a
   dependency-ordered shape — a DB schema/table change that other code relies on, or a `web-server`
-  API/response-shape change that `app/train_dashboard` depends on — say so now and suggest implementing
+  API/response-shape change that `frontend` depends on — say so now and suggest implementing
   the dependency-free piece first as its own small, independently-mergeable change. A `BACKLOG.md`
   entry's task-breakdown summary (if `/ideate` added one) often maps one line to one PR. Don't force a
   split where the task is already one coherent, small unit.
@@ -63,7 +63,7 @@ When the agent returns, **re-verify yourself** — don't just trust its report. 
 cd backend && go build ./... && go vet ./...
 go test ./...                      # for packages with tests
 
-cd app/train_dashboard && flutter analyze && flutter test   # only if Flutter files changed
+cd frontend && npm run lint && npm run build   # only if frontend files changed
 ```
 
 If anything fails, feed the exact failure output back to the **same** agent (`SendMessage`, not a new
@@ -80,7 +80,7 @@ path/to/file.go — what/why
 ...
 
 ## Verification
-build: ✓   vet: ✓   test: ✓ (N tests)   [flutter analyze/test: ✓]
+build: ✓   vet: ✓   test: ✓ (N tests)   [frontend lint/build: ✓]
 <what was fixed to get to green, if anything>
 
 ## BACKLOG.md
