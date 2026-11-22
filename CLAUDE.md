@@ -108,8 +108,9 @@ if err != nil {
   a transaction that only runs writes is fine), SQL written inline and plain (no CTEs, subqueries, window
   functions, or CASE-based rules), with no business rules, thresholds, aggregation, or loops beyond
   scanning/writing. Rows are scanned into plain Go types (no `sql.Null*` leaking out).
-- The row/entity types the repository reads and writes are defined in `repository.go`; helper methods
-  encoding business rules on them go in `service.go`, and the repository never calls them.
+- Structs for well-known entities used across files (e.g. a `Widget`) go in **`models.go`**; a type only
+  one file uses stays in that file. Helper methods encoding business rules on them go in `service.go`, and
+  the repository never calls them.
 - **`service.go`** holds the business logic as plain functions, not methods on a struct. Each takes
   everything it needs as parameters (`ctx`, the `*sql.DB`, `now`, ...), calls repository functions, and
   does the computing and looping in Go, e.g. `summarizeWidgets(ctx, db, day)` calling `selectWidgets`.
