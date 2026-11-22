@@ -205,23 +205,36 @@ func backfillRollups(ctx context.Context, db *sql.DB, nowLisbon time.Time) error
 	if !found || len(minID) < len(dayLayout) {
 		return nil
 	}
-	firstDay := minID[:len(dayLayout)]
-	first, err := time.Parse(dayLayout, firstDay)
+	firstTripDay := minID[:len(dayLayout)]
+	firstTripDate, err := time.Parse(dayLayout, firstTripDay)
 	if err != nil {
 		return fmt.Errorf("failed to parse first trip day %q: %w", minID, err)
 	}
 
-	end := nowLisbon
+	// Before rollupHour yesterday isn't complete yet, so stop before it instead of before today.
+	stopBeforeDate := nowLisbon
 	if _, due := yesterdayToRollup(nowLisbon); !due {
-		end = nowLisbon.AddDate(0, 0, -1)
+		stopBeforeDate = nowLisbon.AddDate(0, 0, -1)
 	}
-	until := end.Format(dayLayout)
-	for start := time.Date(first.Year(), first.Month(), 1, 0, 0, 0, 0, time.UTC); start.Format(dayLayout) < until; start = start.AddDate(0, 1, 0) {
-		from := max(start.Format(dayLayout), firstDay)
-		to := min(start.AddDate(0, 1, 0).Format(dayLayout), until)
+	stopBeforeDay := stopBeforeDate.Format(dayLayout)
+
+	monthStart := time.Date(firstTripDate.Year(), firstTripDate.Month(), 1, 0, 0, 0, 0, time.UTC)
+	for monthStart.Format(dayLayout) < stopBeforeDay {
+		nextMonthStart := monthStart.AddDate(0, 1, 0)
+
+		from := monthStart.Format(dayLayout)
+		if from < firstTripDay {
+			from = firstTripDay
+		}
+		to := nextMonthStart.Format(dayLayout)
+		if to > stopBeforeDay {
+			to = stopBeforeDay
+		}
+
 		if err := rollupRange(ctx, db, from, to); err != nil {
 			return fmt.Errorf("backfill %s..%s: %w", from, to, err)
 		}
+		monthStart = nextMonthStart
 	}
 	return nil
 }
