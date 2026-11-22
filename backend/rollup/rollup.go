@@ -1,9 +1,12 @@
 package main
 
 import (
+	"cmp"
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
+	"slices"
 	"time"
 )
 
@@ -14,63 +17,230 @@ const (
 	urbanServiceType      = "U"
 	urbanDelayedMinutes   = 3
 	defaultDelayedMinutes = 5
+	lateBandShortMax      = 10
+	lateBandMediumMax     = 30
 )
 
 // The overnight gap (last arrival ~02:52, first departure ~04:05) means yesterday is complete from 04:00.
 const rollupHour = 4
 
+const worstTripsPerGroup = 10
+
+type tripRow struct {
+	id                 string
+	trainNumber        sql.NullInt64
+	serviceType        sql.NullString
+	originStation      sql.NullString
+	destinationStation sql.NullString
+	scheduledArrival   sql.NullString
+	actualArrival      sql.NullString
+	delayMinutes       sql.NullInt64
+	isCancelled        sql.NullBool
+}
+
+type dayService struct {
+	day         string
+	serviceType string
+}
+
+type dailyStats struct {
+	dayService
+	trips, cancelled, onTime, delayed, delaySum, delayCount int
+	lateUpTo10, late10To30, lateOver30, maxDelay            int
+}
+
+type worstTrip struct {
+	dayService
+	rank int
+	trip tripRow
+}
+
+// The id prefix is the day (ids are YYYY-MM-DD-<train>).
+func (t tripRow) day() string { return t.id[:10] }
+
+func (t tripRow) service() string { return t.serviceType.String }
+
+func (t tripRow) group() dayService { return dayService{t.day(), t.service()} }
+
+// Delay-eligible rows have an arrival side and aren't cancelled.
+func (t tripRow) eligible() bool { return t.scheduledArrival.Valid && !t.isCancelled.Bool }
+
+// A NULL delay counts as 0.
+func (t tripRow) delay() int { return int(t.delayMinutes.Int64) }
+
+func delayedThreshold(serviceType string) int {
+	if serviceType == urbanServiceType {
+		return urbanDelayedMinutes
+	}
+	return defaultDelayedMinutes
+}
+
+func sortGroups(keys []dayService) {
+	slices.SortFunc(keys, func(a, b dayService) int {
+		return cmp.Or(cmp.Compare(a.day, b.day), cmp.Compare(a.serviceType, b.serviceType))
+	})
+}
+
+func buildDailyStats(trips []tripRow) []dailyStats {
+	byGroup := map[dayService]*dailyStats{}
+	for _, t := range trips {
+		g := t.group()
+		s := byGroup[g]
+		if s == nil {
+			s = &dailyStats{dayService: g}
+			byGroup[g] = s
+		}
+		s.trips++
+		if t.isCancelled.Bool {
+			s.cancelled++
+		}
+		if !t.eligible() {
+			continue
+		}
+		d := t.delay()
+		if s.delayCount == 0 {
+			s.maxDelay = d
+		}
+		s.maxDelay = max(s.maxDelay, d)
+		s.delayCount++
+		s.delaySum += d
+		if d <= delayedThreshold(g.serviceType) {
+			s.onTime++
+			continue
+		}
+		s.delayed++
+		switch {
+		case d <= lateBandShortMax:
+			s.lateUpTo10++
+		case d <= lateBandMediumMax:
+			s.late10To30++
+		default:
+			s.lateOver30++
+		}
+	}
+	keys := make([]dayService, 0, len(byGroup))
+	for g := range byGroup {
+		keys = append(keys, g)
+	}
+	sortGroups(keys)
+	out := make([]dailyStats, 0, len(keys))
+	for _, g := range keys {
+		out = append(out, *byGroup[g])
+	}
+	return out
+}
+
 // Worst trips are the delayed subset, so the list matches the delayed counter.
-// Delay-eligible rows have an arrival side and aren't cancelled; a NULL delay counts as 0.
-// Ids are YYYY-MM-DD-<train>, so the id range filter hits the PK index and day is the id prefix.
-const rollupBase = `
-WITH t AS (
-	SELECT
-		substr(id, 1, 10) AS day,
-		COALESCE(service_type, '') AS service_type,
-		id,
-		train_number,
-		origin_station,
-		destination_station,
-		scheduled_arrival,
-		actual_arrival,
-		COALESCE(is_cancelled, 0) AS cancelled,
-		scheduled_arrival IS NOT NULL AND COALESCE(is_cancelled, 0) = 0 AS eligible,
-		COALESCE(delay_minutes, 0) AS d,
-		CASE WHEN service_type = ? THEN ? ELSE ? END AS thr
-	FROM trips
-	WHERE id >= ? AND id < ?
-)`
+func buildWorstTrips(trips []tripRow) []worstTrip {
+	byGroup := map[dayService][]tripRow{}
+	for _, t := range trips {
+		if t.eligible() && t.delay() > delayedThreshold(t.service()) {
+			byGroup[t.group()] = append(byGroup[t.group()], t)
+		}
+	}
+	keys := make([]dayService, 0, len(byGroup))
+	for g := range byGroup {
+		keys = append(keys, g)
+	}
+	sortGroups(keys)
+	var out []worstTrip
+	for _, g := range keys {
+		group := byGroup[g]
+		slices.SortFunc(group, compareWorse)
+		for i, t := range group[:min(len(group), worstTripsPerGroup)] {
+			out = append(out, worstTrip{dayService: g, rank: i + 1, trip: t})
+		}
+	}
+	return out
+}
 
-const rollupStatsSQL = rollupBase + `
-INSERT INTO daily_stats (day, service_type, trips, cancelled, on_time, delayed, delay_sum, delay_count,
-	late_up_to_10, late_10_30, late_over_30, max_delay)
-SELECT
-	day,
-	service_type,
-	COUNT(*),
-	SUM(cancelled),
-	COALESCE(SUM(eligible AND d <= thr), 0),
-	COALESCE(SUM(eligible AND d > thr), 0),
-	COALESCE(SUM(CASE WHEN eligible THEN d END), 0),
-	COALESCE(SUM(eligible), 0),
-	COALESCE(SUM(eligible AND d > thr AND d <= 10), 0),
-	COALESCE(SUM(eligible AND d > 10 AND d <= 30), 0),
-	COALESCE(SUM(eligible AND d > 30), 0),
-	COALESCE(MAX(CASE WHEN eligible THEN d END), 0)
-FROM t
-GROUP BY day, service_type;`
+// Delay DESC, train_number ASC (NULL first, as in SQL), id ASC.
+func compareWorse(a, b tripRow) int {
+	if c := cmp.Compare(b.delay(), a.delay()); c != 0 {
+		return c
+	}
+	if a.trainNumber.Valid != b.trainNumber.Valid {
+		if !a.trainNumber.Valid {
+			return -1
+		}
+		return 1
+	}
+	return cmp.Or(cmp.Compare(a.trainNumber.Int64, b.trainNumber.Int64), cmp.Compare(a.id, b.id))
+}
 
-const rollupWorstSQL = rollupBase + `
-INSERT INTO daily_worst_trips (day, service_type, rank, trip_id, train_number, origin_station,
-	destination_station, scheduled_arrival, actual_arrival, delay_minutes)
-SELECT day, service_type, rank, id, train_number, origin_station, destination_station,
-	scheduled_arrival, actual_arrival, d
-FROM (
-	SELECT *, ROW_NUMBER() OVER (PARTITION BY day, service_type ORDER BY d DESC, train_number ASC, id ASC) AS rank
-	FROM t
-	WHERE eligible AND d > thr
-)
-WHERE rank <= 10;`
+func selectTrips(db *sql.DB, from, to string) ([]tripRow, error) {
+	rows, err := db.Query(`SELECT id, train_number, service_type, origin_station, destination_station,
+		scheduled_arrival, actual_arrival, delay_minutes, is_cancelled
+		FROM trips WHERE id >= ? AND id < ?;`, from, to)
+	if err != nil {
+		return nil, fmt.Errorf("failed to select trips for %s..%s: %w", from, to, err)
+	}
+	defer rows.Close()
+
+	var trips []tripRow
+	for rows.Next() {
+		var t tripRow
+		if err := rows.Scan(&t.id, &t.trainNumber, &t.serviceType, &t.originStation, &t.destinationStation,
+			&t.scheduledArrival, &t.actualArrival, &t.delayMinutes, &t.isCancelled); err != nil {
+			return nil, fmt.Errorf("failed to scan trip: %w", err)
+		}
+		if len(t.id) < len(dayLayout) {
+			log.Printf("skipping trip with malformed id %q", t.id)
+			continue
+		}
+		trips = append(trips, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read trips for %s..%s: %w", from, to, err)
+	}
+	return trips, nil
+}
+
+func dayRolledUp(db *sql.DB, day string) (bool, error) {
+	var marker int
+	err := db.QueryRow(`SELECT 1 FROM daily_stats WHERE day = ? LIMIT 1;`, day).Scan(&marker)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func selectMinTripID(db *sql.DB) (sql.NullString, error) {
+	var minID sql.NullString
+	err := db.QueryRow(`SELECT MIN(id) FROM trips;`).Scan(&minID)
+	return minID, err
+}
+
+func deleteDailyStats(tx *sql.Tx, from, to string) error {
+	_, err := tx.Exec(`DELETE FROM daily_stats WHERE day >= ? AND day < ?;`, from, to)
+	return err
+}
+
+func deleteWorstTrips(tx *sql.Tx, from, to string) error {
+	_, err := tx.Exec(`DELETE FROM daily_worst_trips WHERE day >= ? AND day < ?;`, from, to)
+	return err
+}
+
+func insertDailyStats(tx *sql.Tx, s dailyStats) error {
+	_, err := tx.Exec(`INSERT INTO daily_stats (day, service_type, trips, cancelled, on_time, delayed, delay_sum,
+		delay_count, late_up_to_10, late_10_30, late_over_30, max_delay)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+		s.day, s.serviceType, s.trips, s.cancelled, s.onTime, s.delayed, s.delaySum,
+		s.delayCount, s.lateUpTo10, s.late10To30, s.lateOver30, s.maxDelay)
+	return err
+}
+
+func insertWorstTrip(tx *sql.Tx, w worstTrip) error {
+	_, err := tx.Exec(`INSERT INTO daily_worst_trips (day, service_type, rank, trip_id, train_number,
+		origin_station, destination_station, scheduled_arrival, actual_arrival, delay_minutes)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+		w.day, w.serviceType, w.rank, w.trip.id, w.trip.trainNumber, w.trip.originStation,
+		w.trip.destinationStation, w.trip.scheduledArrival, w.trip.actualArrival, w.trip.delay())
+	return err
+}
 
 // yesterdayToRollup returns the day to roll up once Lisbon time is past the overnight gap.
 func yesterdayToRollup(nowLisbon time.Time) (string, bool) {
@@ -82,14 +252,15 @@ func yesterdayToRollup(nowLisbon time.Time) (string, bool) {
 
 // rollupRange replaces the rollup rows for days in [from, to) atomically; from and to are YYYY-MM-DD.
 func rollupRange(db *sql.DB, from, to string) error {
-	var marker int
-	err := db.QueryRow(`SELECT 1 FROM trips WHERE id >= ? AND id < ? LIMIT 1;`, from, to).Scan(&marker)
-	if errors.Is(err, sql.ErrNoRows) {
+	trips, err := selectTrips(db, from, to)
+	if err != nil {
+		return err
+	}
+	if len(trips) == 0 {
 		return nil
 	}
-	if err != nil {
-		return fmt.Errorf("failed to check trips for %s..%s: %w", from, to, err)
-	}
+	stats := buildDailyStats(trips)
+	worst := buildWorstTrips(trips)
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -97,16 +268,21 @@ func rollupRange(db *sql.DB, from, to string) error {
 	}
 	defer tx.Rollback()
 
-	for _, table := range []string{"daily_stats", "daily_worst_trips"} {
-		if _, err := tx.Exec(`DELETE FROM `+table+` WHERE day >= ? AND day < ?;`, from, to); err != nil {
-			return fmt.Errorf("failed to clear %s: %w", table, err)
+	if err := deleteDailyStats(tx, from, to); err != nil {
+		return fmt.Errorf("failed to clear daily_stats: %w", err)
+	}
+	if err := deleteWorstTrips(tx, from, to); err != nil {
+		return fmt.Errorf("failed to clear daily_worst_trips: %w", err)
+	}
+	for _, s := range stats {
+		if err := insertDailyStats(tx, s); err != nil {
+			return fmt.Errorf("failed to insert daily_stats %s/%q: %w", s.day, s.serviceType, err)
 		}
 	}
-	if _, err := tx.Exec(rollupStatsSQL, urbanServiceType, urbanDelayedMinutes, defaultDelayedMinutes, from, to); err != nil {
-		return fmt.Errorf("failed to roll up daily_stats: %w", err)
-	}
-	if _, err := tx.Exec(rollupWorstSQL, urbanServiceType, urbanDelayedMinutes, defaultDelayedMinutes, from, to); err != nil {
-		return fmt.Errorf("failed to roll up daily_worst_trips: %w", err)
+	for _, w := range worst {
+		if err := insertWorstTrip(tx, w); err != nil {
+			return fmt.Errorf("failed to insert daily_worst_trips %s/%q #%d: %w", w.day, w.serviceType, w.rank, err)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit rollup: %w", err)
@@ -128,13 +304,12 @@ func rollupYesterdayIfDue(db *sql.DB, nowLisbon time.Time) error {
 	if !due {
 		return nil
 	}
-	var marker int
-	err := db.QueryRow(`SELECT 1 FROM daily_stats WHERE day = ? LIMIT 1;`, day).Scan(&marker)
-	if err == nil {
-		return nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
+	done, err := dayRolledUp(db, day)
+	if err != nil {
 		return fmt.Errorf("failed to read rollup marker: %w", err)
+	}
+	if done {
+		return nil
 	}
 	return rollupDay(db, day)
 }
@@ -142,8 +317,8 @@ func rollupYesterdayIfDue(db *sql.DB, nowLisbon time.Time) error {
 // backfillRollups rolls up every complete day in trips (yesterday only from rollupHour), one calendar
 // month per transaction to keep each Turso transaction bounded.
 func backfillRollups(db *sql.DB, nowLisbon time.Time) error {
-	var minID sql.NullString
-	if err := db.QueryRow(`SELECT MIN(id) FROM trips;`).Scan(&minID); err != nil {
+	minID, err := selectMinTripID(db)
+	if err != nil {
 		return fmt.Errorf("failed to find first trip day: %w", err)
 	}
 	if !minID.Valid || len(minID.String) < 10 {
