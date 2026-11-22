@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"os"
 )
@@ -17,6 +18,9 @@ type Env struct {
 }
 
 func main() {
+	backfill := flag.Bool("backfill", false, "roll up every past day in trips instead of scraping")
+	flag.Parse()
+
 	env := readEnv()
 	log.Printf("Starting scraper on %s...\n", env.env)
 	ctx := context.Background()
@@ -25,6 +29,20 @@ func main() {
 	err := dbClient.InitDB()
 	if err != nil {
 		log.Printf("error initing DB: %v\n", err)
+		if *backfill {
+			os.Exit(1)
+		}
+	}
+
+	if *backfill {
+		log.Printf("WARNING: BACKFILL MODE on %s - rebuilding daily rollups for all past days, no scrape\n", env.env)
+		err = dbClient.BackfillRollups(now())
+		if err != nil {
+			log.Printf("error backfilling rollups: %v", err)
+			os.Exit(1)
+		}
+		log.Printf("backfill finished successfully - %s\n", env.env)
+		os.Exit(0)
 	}
 
 	cpClient := NewCPClient(env.cpBaseUrl, env.cpApiKey, env.cpClientID, env.cpClientSecret)
@@ -33,6 +51,12 @@ func main() {
 	if err != nil {
 		log.Printf("scraper failed: %v", err)
 		os.Exit(1)
+	}
+
+	// rollup failures must not fail the scrape
+	err = dbClient.RollupYesterdayIfDue(now())
+	if err != nil {
+		log.Printf("error rolling up yesterday: %v", err)
 	}
 
 	log.Printf("scrape finished successfully - %s\n", env.env)

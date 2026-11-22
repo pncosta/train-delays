@@ -30,4 +30,4 @@ RUN apk add --no-cache ca-certificates tzdata
 COPY --from=builder /main /main
 # Use the PORT environment variable
 ENV PORT=8080
-CMD ["./main"]
+ENTRYPOINT ["./main"]
