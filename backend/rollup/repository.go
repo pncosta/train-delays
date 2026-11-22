@@ -93,20 +93,14 @@ func dailyStatsExist(ctx context.Context, db *sql.DB, day string) (bool, error) 
 	return true, nil
 }
 
-// replaceRollups atomically swaps the rollup rows for days in [from, to) with stats and worst.
-func replaceRollups(ctx context.Context, db *sql.DB, from, to string, stats []dailyStats, worst []worstTrip) error {
+// insertRollups writes a range's stats and worst trips in one transaction; rows that already exist are kept.
+func insertRollups(ctx context.Context, db *sql.DB, stats []dailyStats, worst []worstTrip) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin rollup: %w", err)
 	}
 	defer tx.Rollback()
 
-	if err := deleteDailyStats(ctx, tx, from, to); err != nil {
-		return fmt.Errorf("failed to clear daily_stats: %w", err)
-	}
-	if err := deleteWorstTrips(ctx, tx, from, to); err != nil {
-		return fmt.Errorf("failed to clear daily_worst_trips: %w", err)
-	}
 	for _, s := range stats {
 		if err := insertDailyStats(ctx, tx, s); err != nil {
 			return fmt.Errorf("failed to insert daily_stats %s/%q: %w", s.day, s.serviceType, err)
@@ -123,20 +117,11 @@ func replaceRollups(ctx context.Context, db *sql.DB, from, to string, stats []da
 	return nil
 }
 
-func deleteDailyStats(ctx context.Context, tx *sql.Tx, from, to string) error {
-	_, err := tx.ExecContext(ctx, `DELETE FROM daily_stats WHERE day >= ? AND day < ?;`, from, to)
-	return err
-}
-
-func deleteWorstTrips(ctx context.Context, tx *sql.Tx, from, to string) error {
-	_, err := tx.ExecContext(ctx, `DELETE FROM daily_worst_trips WHERE day >= ? AND day < ?;`, from, to)
-	return err
-}
-
 func insertDailyStats(ctx context.Context, tx *sql.Tx, s dailyStats) error {
 	_, err := tx.ExecContext(ctx, `INSERT INTO daily_stats (day, service_type, trips, cancelled, on_time, delayed, delay_sum,
 		delay_count, late_up_to_10, late_10_30, late_over_30, max_delay)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT DO NOTHING;`,
 		s.day, s.serviceType, s.trips, s.cancelled, s.onTime, s.delayed, s.delaySum,
 		s.delayCount, s.lateUpTo10, s.late10To30, s.lateOver30, s.maxDelay)
 	return err
@@ -145,7 +130,8 @@ func insertDailyStats(ctx context.Context, tx *sql.Tx, s dailyStats) error {
 func insertWorstTrip(ctx context.Context, tx *sql.Tx, w worstTrip) error {
 	_, err := tx.ExecContext(ctx, `INSERT INTO daily_worst_trips (day, service_type, rank, trip_id, train_number,
 		origin_station, destination_station, scheduled_arrival, actual_arrival, delay_minutes)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT DO NOTHING;`,
 		w.day, w.serviceType, w.rank, w.trip.id, w.trip.trainNumber, w.trip.originStation,
 		w.trip.destinationStation, w.trip.scheduledArrival, w.trip.actualArrival, w.delay)
 	return err

@@ -158,7 +158,7 @@ func lisbonNow(t time.Time) (time.Time, error) {
 	return t.In(lisbon), nil
 }
 
-// rollupRange replaces the rollup rows for days in [from, to) atomically; from and to are YYYY-MM-DD.
+// rollupRange rolls up the days in [from, to) (YYYY-MM-DD); days already rolled up are left untouched.
 func rollupRange(ctx context.Context, db *sql.DB, from, to string) error {
 	selected, err := selectTrips(ctx, db, from, to)
 	if err != nil {
@@ -175,7 +175,7 @@ func rollupRange(ctx context.Context, db *sql.DB, from, to string) error {
 	if len(trips) == 0 {
 		return nil
 	}
-	return replaceRollups(ctx, db, from, to, buildDailyStats(trips), buildWorstTrips(trips))
+	return insertRollups(ctx, db, buildDailyStats(trips), buildWorstTrips(trips))
 }
 
 func rollupDay(ctx context.Context, db *sql.DB, day string) error {
