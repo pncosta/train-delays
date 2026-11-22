@@ -5,7 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"maps"
 	"slices"
 	"time"
 )
@@ -25,9 +25,6 @@ const (
 const rollupHour = 4
 
 const worstTripsPerGroup = 10
-
-// The id prefix is the day (ids are YYYY-MM-DD-<train>).
-func (t trip) day() string { return t.id[:len(dayLayout)] }
 
 func (t trip) service() string {
 	if t.serviceType == nil {
@@ -56,50 +53,57 @@ func delayedThreshold(serviceType string) int {
 	return defaultDelayedMinutes
 }
 
-func buildDailyStats(trips []trip) []dailyStats {
-	sorted := slices.Clone(trips)
-	slices.SortFunc(sorted, func(a, b trip) int {
-		return cmp.Or(cmp.Compare(a.day(), b.day()), cmp.Compare(a.service(), b.service()))
-	})
-	var out []dailyStats
-	for _, t := range sorted {
-		if len(out) == 0 || out[len(out)-1].day != t.day() || out[len(out)-1].serviceType != t.service() {
-			out = append(out, dailyStats{day: t.day(), serviceType: t.service()})
+// buildDailyStats returns one row per service type, sorted by service type; all trips belong to day.
+func buildDailyStats(day string, trips []trip) []dailyStats {
+	statsByService := map[string]*dailyStats{}
+	for _, t := range trips {
+		service := t.service()
+		stats := statsByService[service]
+		if stats == nil {
+			stats = &dailyStats{day: day, serviceType: service}
+			statsByService[service] = stats
 		}
-		s := &out[len(out)-1]
-		s.trips++
+
+		stats.trips++
 		if t.cancelled() {
-			s.cancelled++
+			stats.cancelled++
 		}
 		if !t.eligible() {
 			continue
 		}
-		d := t.delay()
-		if s.delayCount == 0 {
-			s.maxDelay = d
+
+		delay := t.delay()
+		if stats.delayCount == 0 || delay > stats.maxDelay {
+			stats.maxDelay = delay
 		}
-		s.maxDelay = max(s.maxDelay, d)
-		s.delayCount++
-		s.delaySum += d
-		if d <= delayedThreshold(s.serviceType) {
-			s.onTime++
+		stats.delayCount++
+		stats.delaySum += delay
+
+		if delay <= delayedThreshold(service) {
+			stats.onTime++
 			continue
 		}
-		s.delayed++
+		stats.delayed++
 		switch {
-		case d <= lateBandShortMax:
-			s.lateUpTo10++
-		case d <= lateBandMediumMax:
-			s.late10To30++
+		case delay <= lateBandShortMax:
+			stats.lateUpTo10++
+		case delay <= lateBandMediumMax:
+			stats.late10To30++
 		default:
-			s.lateOver30++
+			stats.lateOver30++
 		}
+	}
+
+	var out []dailyStats
+	for _, service := range slices.Sorted(maps.Keys(statsByService)) {
+		out = append(out, *statsByService[service])
 	}
 	return out
 }
 
-// Worst trips are the delayed subset, so the list matches the delayed counter.
-func buildWorstTrips(trips []trip) []worstTrip {
+// buildWorstTrips returns the worst delayed trips per service type; all trips belong to day.
+// Only delayed trips are ranked, so the list matches the delayed counter.
+func buildWorstTrips(day string, trips []trip) []worstTrip {
 	var delayed []trip
 	for _, t := range trips {
 		if t.eligible() && t.delay() > delayedThreshold(t.service()) {
@@ -107,17 +111,18 @@ func buildWorstTrips(trips []trip) []worstTrip {
 		}
 	}
 	slices.SortFunc(delayed, func(a, b trip) int {
-		return cmp.Or(cmp.Compare(a.day(), b.day()), cmp.Compare(a.service(), b.service()), compareWorse(a, b))
+		return cmp.Or(cmp.Compare(a.service(), b.service()), compareWorse(a, b))
 	})
+
 	var out []worstTrip
 	rank := 0
 	for i, t := range delayed {
-		if i == 0 || t.day() != delayed[i-1].day() || t.service() != delayed[i-1].service() {
+		if i == 0 || t.service() != delayed[i-1].service() {
 			rank = 0
 		}
 		rank++
 		if rank <= worstTripsPerGroup {
-			out = append(out, worstTrip{day: t.day(), serviceType: t.service(), rank: rank, trip: t, delay: t.delay()})
+			out = append(out, worstTrip{day: day, serviceType: t.service(), rank: rank, trip: t, delay: t.delay()})
 		}
 	}
 	return out
@@ -158,22 +163,14 @@ func rollupDay(ctx context.Context, db *sql.DB, day string) error {
 	}
 	nextDay := date.AddDate(0, 0, 1).Format(dayLayout)
 
-	selected, err := selectTrips(ctx, db, day, nextDay)
+	trips, err := selectTrips(ctx, db, day, nextDay)
 	if err != nil {
 		return err
-	}
-	trips := make([]trip, 0, len(selected))
-	for _, t := range selected {
-		if len(t.id) < len(dayLayout) {
-			log.Printf("skipping trip with malformed id %q", t.id)
-			continue
-		}
-		trips = append(trips, t)
 	}
 	if len(trips) == 0 {
 		return nil
 	}
-	return insertRollups(ctx, db, buildDailyStats(trips), buildWorstTrips(trips))
+	return insertRollups(ctx, db, buildDailyStats(day, trips), buildWorstTrips(day, trips))
 }
 
 // backfillRollups rolls up every day from the first trip up to (not including) today, one day per transaction.

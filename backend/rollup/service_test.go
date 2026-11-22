@@ -304,7 +304,7 @@ func TestBuildDailyStatsBoundaries(t *testing.T) {
 			trips = append(trips, eligibleTrip(fmt.Sprintf("2026-01-01-%d", i), tc.svc, nil, d))
 		}
 		tc.want.day, tc.want.serviceType = "2026-01-01", tc.svc
-		got := buildDailyStats(trips)
+		got := buildDailyStats("2026-01-01", trips)
 		if len(got) != 1 || got[0] != tc.want {
 			t.Errorf("%s %v: got %+v, want %+v", tc.svc, tc.delays, got, tc.want)
 		}
@@ -313,7 +313,7 @@ func TestBuildDailyStatsBoundaries(t *testing.T) {
 
 func TestBuildDailyStatsNoEligibleRows(t *testing.T) {
 	cancelled := trip{id: "2026-01-01-1", isCancelled: bp(true)}
-	got := buildDailyStats([]trip{cancelled})
+	got := buildDailyStats("2026-01-01", []trip{cancelled})
 	want := []dailyStats{{day: "2026-01-01", trips: 1, cancelled: 1}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %+v, want %+v", got, want)
@@ -331,7 +331,7 @@ func TestBuildWorstTripsOrderAndCap(t *testing.T) {
 		eligibleTrip("2026-01-01-f", "IC", n(9), 5),
 	}
 	var ids []string
-	for _, w := range buildWorstTrips(trips) {
+	for _, w := range buildWorstTrips("2026-01-01", trips) {
 		ids = append(ids, w.trip.id[len(w.trip.id)-1:])
 	}
 	if want := []string{"e", "d", "c", "a", "b"}; !reflect.DeepEqual(ids, want) {
@@ -342,7 +342,7 @@ func TestBuildWorstTripsOrderAndCap(t *testing.T) {
 	for i := 0; i < 15; i++ {
 		many = append(many, eligibleTrip(fmt.Sprintf("2026-01-01-%02d", i), "IC", n(i), 10+i))
 	}
-	got := buildWorstTrips(many)
+	got := buildWorstTrips("2026-01-01", many)
 	if len(got) != worstTripsPerGroup || got[0].rank != 1 || got[0].delay != 24 {
 		t.Errorf("cap: got %d rows, first %+v", len(got), got[0])
 	}
