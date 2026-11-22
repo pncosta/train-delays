@@ -196,8 +196,10 @@ func TestRollupCountsMatchTrips(t *testing.T) {
 		seedTrip{id: "2026-11-05-9", svc: "AP", train: 9},
 		arr("2026-11-06", 1, "IC", 2),
 	)
-	if err := rollupRange(t.Context(), db, "2026-11-04", "2026-11-06"); err != nil {
-		t.Fatal(err)
+	for _, day := range []string{"2026-11-04", "2026-11-05"} {
+		if err := rollupDay(t.Context(), db, day); err != nil {
+			t.Fatal(err)
+		}
 	}
 	for _, day := range []string{"2026-11-04", "2026-11-05"} {
 		var got, cancelledGot, want, cancelledWant int

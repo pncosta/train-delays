@@ -158,9 +158,15 @@ func lisbonNow(t time.Time) (time.Time, error) {
 	return t.In(lisbon), nil
 }
 
-// rollupRange rolls up the days in [from, to) (YYYY-MM-DD); days already rolled up are left untouched.
-func rollupRange(ctx context.Context, db *sql.DB, from, to string) error {
-	selected, err := selectTrips(ctx, db, from, to)
+// rollupDay rolls up one day (YYYY-MM-DD); a day already rolled up is left untouched.
+func rollupDay(ctx context.Context, db *sql.DB, day string) error {
+	date, err := time.Parse(dayLayout, day)
+	if err != nil {
+		return fmt.Errorf("failed to parse day %q: %w", day, err)
+	}
+	nextDay := date.AddDate(0, 0, 1).Format(dayLayout)
+
+	selected, err := selectTrips(ctx, db, day, nextDay)
 	if err != nil {
 		return err
 	}
@@ -178,14 +184,6 @@ func rollupRange(ctx context.Context, db *sql.DB, from, to string) error {
 	return insertRollups(ctx, db, buildDailyStats(trips), buildWorstTrips(trips))
 }
 
-func rollupDay(ctx context.Context, db *sql.DB, day string) error {
-	d, err := time.Parse(dayLayout, day)
-	if err != nil {
-		return fmt.Errorf("failed to parse day %q: %w", day, err)
-	}
-	return rollupRange(ctx, db, day, d.AddDate(0, 0, 1).Format(dayLayout))
-}
-
 // rollupYesterday rolls up yesterday once Lisbon time is past the overnight gap; reruns keep existing rows.
 func rollupYesterday(ctx context.Context, db *sql.DB, nowLisbon time.Time) error {
 	day, due := yesterdayToRollup(nowLisbon)
@@ -195,8 +193,7 @@ func rollupYesterday(ctx context.Context, db *sql.DB, nowLisbon time.Time) error
 	return rollupDay(ctx, db, day)
 }
 
-// backfillRollups rolls up every complete day in trips (yesterday only from rollupHour), one calendar
-// month per transaction to keep each Turso transaction bounded.
+// backfillRollups rolls up every complete day in trips, one day per transaction (yesterday only from rollupHour).
 func backfillRollups(ctx context.Context, db *sql.DB, nowLisbon time.Time) error {
 	minID, found, err := selectMinTripID(ctx, db)
 	if err != nil {
@@ -218,23 +215,12 @@ func backfillRollups(ctx context.Context, db *sql.DB, nowLisbon time.Time) error
 	}
 	stopBeforeDay := stopBeforeDate.Format(dayLayout)
 
-	monthStart := time.Date(firstTripDate.Year(), firstTripDate.Month(), 1, 0, 0, 0, 0, time.UTC)
-	for monthStart.Format(dayLayout) < stopBeforeDay {
-		nextMonthStart := monthStart.AddDate(0, 1, 0)
-
-		from := monthStart.Format(dayLayout)
-		if from < firstTripDay {
-			from = firstTripDay
+	day := firstTripDate
+	for day.Format(dayLayout) < stopBeforeDay {
+		if err := rollupDay(ctx, db, day.Format(dayLayout)); err != nil {
+			return fmt.Errorf("backfill %s: %w", day.Format(dayLayout), err)
 		}
-		to := nextMonthStart.Format(dayLayout)
-		if to > stopBeforeDay {
-			to = stopBeforeDay
-		}
-
-		if err := rollupRange(ctx, db, from, to); err != nil {
-			return fmt.Errorf("backfill %s..%s: %w", from, to, err)
-		}
-		monthStart = nextMonthStart
+		day = day.AddDate(0, 0, 1)
 	}
 	return nil
 }
