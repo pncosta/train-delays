@@ -13,20 +13,15 @@ type trip struct {
 	isCancelled        *bool
 }
 
-type dayService struct {
-	day         string
-	serviceType string
-}
-
 type dailyStats struct {
-	dayService
+	day, serviceType                                        string
 	trips, cancelled, onTime, delayed, delaySum, delayCount int
 	lateUpTo10, late10To30, lateOver30, maxDelay            int
 }
 
 type worstTrip struct {
-	dayService
-	rank  int
-	trip  trip
-	delay int
+	day, serviceType string
+	rank             int
+	trip             trip
+	delay            int
 }

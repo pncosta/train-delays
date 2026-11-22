@@ -4,11 +4,11 @@ import "testing"
 
 func TestReplaceRollupsReplacesOnlyRange(t *testing.T) {
 	db := newTestDB(t)
-	old := func(day string) dailyStats { return dailyStats{dayService: dayService{day, "IC"}, trips: 1} }
+	old := func(day string) dailyStats { return dailyStats{day: day, serviceType: "IC", trips: 1} }
 	if err := replaceRollups(t.Context(), db, "2026-11-01", "2026-11-10", []dailyStats{old("2026-11-05"), old("2026-11-06")}, nil); err != nil {
 		t.Fatal(err)
 	}
-	fresh := dailyStats{dayService: dayService{"2026-11-05", "IC"}, trips: 7}
+	fresh := dailyStats{day: "2026-11-05", serviceType: "IC", trips: 7}
 	if err := replaceRollups(t.Context(), db, "2026-11-05", "2026-11-06", []dailyStats{fresh}, nil); err != nil {
 		t.Fatal(err)
 	}

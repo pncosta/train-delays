@@ -36,8 +36,6 @@ func (t trip) service() string {
 	return *t.serviceType
 }
 
-func (t trip) group() dayService { return dayService{t.day(), t.service()} }
-
 func (t trip) cancelled() bool { return t.isCancelled != nil && *t.isCancelled }
 
 // Delay-eligible rows have an arrival side and aren't cancelled.
@@ -58,21 +56,17 @@ func delayedThreshold(serviceType string) int {
 	return defaultDelayedMinutes
 }
 
-func sortGroups(keys []dayService) {
-	slices.SortFunc(keys, func(a, b dayService) int {
-		return cmp.Or(cmp.Compare(a.day, b.day), cmp.Compare(a.serviceType, b.serviceType))
-	})
-}
-
 func buildDailyStats(trips []trip) []dailyStats {
-	byGroup := map[dayService]*dailyStats{}
-	for _, t := range trips {
-		g := t.group()
-		s := byGroup[g]
-		if s == nil {
-			s = &dailyStats{dayService: g}
-			byGroup[g] = s
+	sorted := slices.Clone(trips)
+	slices.SortFunc(sorted, func(a, b trip) int {
+		return cmp.Or(cmp.Compare(a.day(), b.day()), cmp.Compare(a.service(), b.service()))
+	})
+	var out []dailyStats
+	for _, t := range sorted {
+		if len(out) == 0 || out[len(out)-1].day != t.day() || out[len(out)-1].serviceType != t.service() {
+			out = append(out, dailyStats{day: t.day(), serviceType: t.service()})
 		}
+		s := &out[len(out)-1]
 		s.trips++
 		if t.cancelled() {
 			s.cancelled++
@@ -87,7 +81,7 @@ func buildDailyStats(trips []trip) []dailyStats {
 		s.maxDelay = max(s.maxDelay, d)
 		s.delayCount++
 		s.delaySum += d
-		if d <= delayedThreshold(g.serviceType) {
+		if d <= delayedThreshold(s.serviceType) {
 			s.onTime++
 			continue
 		}
@@ -101,37 +95,29 @@ func buildDailyStats(trips []trip) []dailyStats {
 			s.lateOver30++
 		}
 	}
-	keys := make([]dayService, 0, len(byGroup))
-	for g := range byGroup {
-		keys = append(keys, g)
-	}
-	sortGroups(keys)
-	out := make([]dailyStats, 0, len(keys))
-	for _, g := range keys {
-		out = append(out, *byGroup[g])
-	}
 	return out
 }
 
 // Worst trips are the delayed subset, so the list matches the delayed counter.
 func buildWorstTrips(trips []trip) []worstTrip {
-	byGroup := map[dayService][]trip{}
+	var delayed []trip
 	for _, t := range trips {
 		if t.eligible() && t.delay() > delayedThreshold(t.service()) {
-			byGroup[t.group()] = append(byGroup[t.group()], t)
+			delayed = append(delayed, t)
 		}
 	}
-	keys := make([]dayService, 0, len(byGroup))
-	for g := range byGroup {
-		keys = append(keys, g)
-	}
-	sortGroups(keys)
+	slices.SortFunc(delayed, func(a, b trip) int {
+		return cmp.Or(cmp.Compare(a.day(), b.day()), cmp.Compare(a.service(), b.service()), compareWorse(a, b))
+	})
 	var out []worstTrip
-	for _, g := range keys {
-		group := byGroup[g]
-		slices.SortFunc(group, compareWorse)
-		for i, t := range group[:min(len(group), worstTripsPerGroup)] {
-			out = append(out, worstTrip{dayService: g, rank: i + 1, trip: t, delay: t.delay()})
+	rank := 0
+	for i, t := range delayed {
+		if i == 0 || t.day() != delayed[i-1].day() || t.service() != delayed[i-1].service() {
+			rank = 0
+		}
+		rank++
+		if rank <= worstTripsPerGroup {
+			out = append(out, worstTrip{day: t.day(), serviceType: t.service(), rank: rank, trip: t, delay: t.delay()})
 		}
 	}
 	return out

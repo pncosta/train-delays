@@ -117,6 +117,8 @@ if err != nil {
 - **`handlers.go`** (HTTP services) parses/validates the request, calls the service, and maps errors to
   responses. For a job, `main.go` plays this role: read env, open the DB once, call schema init (e.g.
   `initSchema`) and the service directly as wiring, exit non-zero on failure.
+- Repeating a few lines is fine; don't add a type, helper or generic whose only job is to avoid that
+  repetition (e.g. a struct embedded in two others just to share two fields).
 - Applies to new code and to `rollup`; `scraper` and `web-server` predate it — migrate them only when asked.
 
 ## Logging

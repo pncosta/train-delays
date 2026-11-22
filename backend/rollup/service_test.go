@@ -359,7 +359,7 @@ func TestBuildDailyStatsBoundaries(t *testing.T) {
 		for i, d := range tc.delays {
 			trips = append(trips, eligibleTrip(fmt.Sprintf("2026-01-01-%d", i), tc.svc, nil, d))
 		}
-		tc.want.dayService = dayService{"2026-01-01", tc.svc}
+		tc.want.day, tc.want.serviceType = "2026-01-01", tc.svc
 		got := buildDailyStats(trips)
 		if len(got) != 1 || got[0] != tc.want {
 			t.Errorf("%s %v: got %+v, want %+v", tc.svc, tc.delays, got, tc.want)
@@ -370,7 +370,7 @@ func TestBuildDailyStatsBoundaries(t *testing.T) {
 func TestBuildDailyStatsNoEligibleRows(t *testing.T) {
 	cancelled := trip{id: "2026-01-01-1", isCancelled: bp(true)}
 	got := buildDailyStats([]trip{cancelled})
-	want := []dailyStats{{dayService: dayService{"2026-01-01", ""}, trips: 1, cancelled: 1}}
+	want := []dailyStats{{day: "2026-01-01", trips: 1, cancelled: 1}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
