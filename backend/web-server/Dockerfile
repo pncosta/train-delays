@@ -26,7 +26,7 @@ RUN go build -o /main .
 
 # Run
 FROM alpine:latest
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates tzdata
 COPY --from=builder /main /main 
 # Use the PORT environment variable
 ENV PORT=8080
