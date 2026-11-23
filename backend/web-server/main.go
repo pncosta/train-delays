@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
@@ -29,14 +28,7 @@ func main() {
 		log.Printf("error connecting to DB %v\n", err)
 	}
 
-	// DBClient opens a connection per call and doesn't expose one, so the cached reads get their own persistent *sql.DB.
-	statsDB, err := sql.Open("libsql", fmt.Sprintf("%s?authToken=%s", env.dbUrl, env.dbToken))
-	if err != nil {
-		log.Panicf("failed to open database: %v", err)
-	}
-	defer statsDB.Close()
-
-	mux, err := setupHandlers(ctx, env, dbClient, statsDB)
+	mux, err := setupHandlers(ctx, env, dbClient)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -61,12 +53,12 @@ func withCORS(next http.Handler) http.Handler {
 	})
 }
 
-func setupHandlers(ctx context.Context, env Env, dbClient *DBClient, statsDB *sql.DB) (*http.ServeMux, error) {
+func setupHandlers(ctx context.Context, env Env, dbClient *DBClient) (*http.ServeMux, error) {
 	h := &Handler{}
 	statsCache := newDayCache()
 	mux := &http.ServeMux{}
-	mux.HandleFunc("GET /api/stats/daily", h.handleDailyStats(statsDB, statsCache))
-	mux.HandleFunc("GET /api/stats/worst-trips", h.handleWorstTrips(statsDB, statsCache))
+	mux.HandleFunc("GET /api/stats/daily", h.handleDailyStats(dbClient, statsCache))
+	mux.HandleFunc("GET /api/stats/worst-trips", h.handleWorstTrips(dbClient, statsCache))
 	mux.HandleFunc("GET /api/stats/summary", h.handleSummary(ctx, "", dbClient))
 	mux.HandleFunc("GET /api/stats/worst", h.handleWorstDelays(ctx, "", dbClient))
 	mux.HandleFunc("GET /api/stats/cancellations", h.handleCancellations(ctx, "", dbClient))

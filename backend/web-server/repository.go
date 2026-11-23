@@ -79,7 +79,13 @@ func selectSummaryGroups(db *sql.DB, days int) ([]summaryGroup, error) {
 	return groups, nil
 }
 
-func selectDailyStats(ctx context.Context, db *sql.DB, fromDay, toDay string) ([]DailyStats, error) {
+func (c *DBClient) SelectDailyStats(ctx context.Context, fromDay, toDay string) ([]DailyStats, error) {
+	db, err := sql.Open("libsql", c.dbConnectUrl)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+	defer db.Close()
+
 	rows, err := db.QueryContext(ctx, `
 		SELECT day, service_type, trips, cancelled, on_time, delayed, delay_sum, delay_count,
 		       late_up_to_10, late_10_30, late_over_30, max_delay
@@ -108,7 +114,13 @@ func selectDailyStats(ctx context.Context, db *sql.DB, fromDay, toDay string) ([
 	return stats, nil
 }
 
-func selectDailyWorstTrips(ctx context.Context, db *sql.DB, fromDay, toDay string) ([]DailyWorstTrip, error) {
+func (c *DBClient) SelectDailyWorstTrips(ctx context.Context, fromDay, toDay string) ([]DailyWorstTrip, error) {
+	db, err := sql.Open("libsql", c.dbConnectUrl)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+	defer db.Close()
+
 	rows, err := db.QueryContext(ctx, `
 		SELECT day, service_type, trip_id, COALESCE(train_number, 0), COALESCE(origin_station, ''),
 		       COALESCE(destination_station, ''), COALESCE(scheduled_arrival, ''), COALESCE(actual_arrival, ''),

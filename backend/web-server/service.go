@@ -3,7 +3,6 @@ package main
 import (
 	"cmp"
 	"context"
-	"database/sql"
 	"maps"
 	"slices"
 	"sync"
@@ -216,11 +215,8 @@ func loadWorstTrips(ctx context.Context, cache *dayCache, now time.Time, from, t
 	return append(trips, fresh...), nil
 }
 
-func getDailyStats(ctx context.Context, db *sql.DB, cache *dayCache, now time.Time, from, to time.Time) ([]DailyStats, error) {
-	readStats := func(ctx context.Context, fromDay, toDay string) ([]DailyStats, error) {
-		return selectDailyStats(ctx, db, fromDay, toDay)
-	}
-	return loadStats(ctx, cache, now, from, to, readStats)
+func getDailyStats(ctx context.Context, dbClient *DBClient, cache *dayCache, now time.Time, from, to time.Time) ([]DailyStats, error) {
+	return loadStats(ctx, cache, now, from, to, dbClient.SelectDailyStats)
 }
 
 // topWorstTrips keeps the limit worst trips: delay DESC, then train number, then trip id so the order is stable.
@@ -245,11 +241,8 @@ func topWorstTrips(trips []DailyWorstTrip, serviceType string, limit int) []Dail
 }
 
 // serviceType "" means all types.
-func getWorstTrips(ctx context.Context, db *sql.DB, cache *dayCache, now time.Time, from, to time.Time, serviceType string) ([]DailyWorstTrip, error) {
-	readWorstTrips := func(ctx context.Context, fromDay, toDay string) ([]DailyWorstTrip, error) {
-		return selectDailyWorstTrips(ctx, db, fromDay, toDay)
-	}
-	trips, err := loadWorstTrips(ctx, cache, now, from, to, readWorstTrips)
+func getWorstTrips(ctx context.Context, dbClient *DBClient, cache *dayCache, now time.Time, from, to time.Time, serviceType string) ([]DailyWorstTrip, error) {
+	trips, err := loadWorstTrips(ctx, cache, now, from, to, dbClient.SelectDailyWorstTrips)
 	if err != nil {
 		return nil, err
 	}

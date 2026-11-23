@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -112,7 +111,7 @@ func parseDayRange(query url.Values) (time.Time, time.Time, error) {
 	return from, to, nil
 }
 
-func (h *Handler) handleDailyStats(db *sql.DB, cache *dayCache) http.HandlerFunc {
+func (h *Handler) handleDailyStats(dbClient *DBClient, cache *dayCache) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		from, to, err := parseDayRange(r.URL.Query())
 		if err != nil {
@@ -120,7 +119,7 @@ func (h *Handler) handleDailyStats(db *sql.DB, cache *dayCache) http.HandlerFunc
 			return
 		}
 
-		stats, err := getDailyStats(r.Context(), db, cache, time.Now(), from, to)
+		stats, err := getDailyStats(r.Context(), dbClient, cache, time.Now(), from, to)
 		if err != nil {
 			log.Printf("error getting daily stats: %v", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
@@ -132,7 +131,7 @@ func (h *Handler) handleDailyStats(db *sql.DB, cache *dayCache) http.HandlerFunc
 	}
 }
 
-func (h *Handler) handleWorstTrips(db *sql.DB, cache *dayCache) http.HandlerFunc {
+func (h *Handler) handleWorstTrips(dbClient *DBClient, cache *dayCache) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
 		from, to, err := parseDayRange(query)
@@ -142,7 +141,7 @@ func (h *Handler) handleWorstTrips(db *sql.DB, cache *dayCache) http.HandlerFunc
 		}
 
 		serviceType := query.Get("service_type")
-		worstTrips, err := getWorstTrips(r.Context(), db, cache, time.Now(), from, to, serviceType)
+		worstTrips, err := getWorstTrips(r.Context(), dbClient, cache, time.Now(), from, to, serviceType)
 		if err != nil {
 			log.Printf("error getting worst trips: %v", err)
 			http.Error(w, "internal error", http.StatusInternalServerError)
