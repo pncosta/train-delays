@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"train-delays/shared"
 
 	_ "github.com/tursodatabase/libsql-client-go/libsql" // New driver
@@ -46,52 +45,109 @@ func (c *DBClient) GetSummary() (*DashboardResponse, error) {
 
 	days := 7 // TODO make parameter
 
-	// The SQL Union Query
-	query := `
-			SELECT service_type, COUNT(*), COALESCE(AVG(delay_minutes), 0),
-			       SUM(CASE WHEN is_cancelled = 0 AND delay_minutes < 3 THEN 1 ELSE 0 END),
-			       SUM(CASE WHEN is_cancelled = 0 AND delay_minutes >= 3 THEN 1 ELSE 0 END),
-			       SUM(is_cancelled)
-			FROM trips
-			WHERE created_at >= datetime('now', '-' || ? || ' days') AND delay_minutes is not null
-			GROUP BY service_type
-
-			UNION ALL
-
-			SELECT 'TOTAL_SYSTEM', COUNT(*), COALESCE(AVG(delay_minutes), 0),
-			       SUM(CASE WHEN is_cancelled = 0 AND delay_minutes < 3 THEN 1 ELSE 0 END),
-			       SUM(CASE WHEN is_cancelled = 0 AND delay_minutes >= 3 THEN 1 ELSE 0 END),
-			       SUM(is_cancelled)
-			FROM trips
-			WHERE created_at >= datetime('now', '-' || ? || ' days')  AND delay_minutes is not null;
-		`
-	rows, err := db.Query(query, days, days)
+	groups, err := selectSummaryGroups(db, days)
 	if err != nil {
 		return nil, err
 	}
+	return summarizeGroups(groups), nil
+}
+
+func selectSummaryGroups(db *sql.DB, days int) ([]summaryGroup, error) {
+	rows, err := db.Query(`
+		SELECT COALESCE(service_type, ''), delay_minutes, COALESCE(is_cancelled, 0), scheduled_arrival IS NOT NULL, COUNT(*)
+		FROM trips
+		WHERE created_at >= datetime('now', '-' || ? || ' days')
+		GROUP BY service_type, delay_minutes, is_cancelled, scheduled_arrival IS NOT NULL;`, days)
+	if err != nil {
+		return nil, fmt.Errorf("failed to select summary groups: %w", err)
+	}
 	defer rows.Close()
 
-	var response = &DashboardResponse{}
-	response.Breakdown = []ServiceStats{}
-
+	var groups []summaryGroup
 	for rows.Next() {
-		var s ServiceStats
-		err := rows.Scan(
-			&s.ServiceType,
-			&s.TotalTrips,
-			&s.AvgDelay,
-			&s.OnTimeCount,
-			&s.DelayedCount,
-			&s.CancelledCount,
-		)
+		var group summaryGroup
+		err := rows.Scan(&group.ServiceType, &group.DelayMinutes, &group.IsCancelled, &group.HasScheduledArrival, &group.Count)
 		if err != nil {
-			log.Printf("error scanning rows: %v", err)
-			continue
+			return nil, fmt.Errorf("failed to scan summary group: %w", err)
 		}
-		response.Breakdown = append(response.Breakdown, s)
+		groups = append(groups, group)
 	}
+	err = rows.Err()
+	if err != nil {
+		return nil, fmt.Errorf("failed to iterate summary groups: %w", err)
+	}
+	return groups, nil
+}
 
-	return response, nil
+func (c *DBClient) SelectDailyStats(ctx context.Context, fromDay, toDay string) ([]DailyStats, error) {
+	db, err := sql.Open("libsql", c.dbConnectUrl)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+	defer db.Close()
+
+	rows, err := db.QueryContext(ctx, `
+		SELECT day, service_type, trips, cancelled, on_time, delayed, delay_sum, delay_count,
+		       late_up_to_10, late_10_30, late_over_30, max_delay
+		FROM daily_stats
+		WHERE day >= ? AND day <= ?
+		ORDER BY day, service_type;`, fromDay, toDay)
+	if err != nil {
+		return nil, fmt.Errorf("failed to select daily_stats %s..%s: %w", fromDay, toDay, err)
+	}
+	defer rows.Close()
+
+	stats := []DailyStats{}
+	for rows.Next() {
+		var row DailyStats
+		err := rows.Scan(&row.Day, &row.ServiceType, &row.Trips, &row.Cancelled, &row.OnTime, &row.Delayed,
+			&row.DelaySum, &row.DelayCount, &row.LateUpTo10, &row.Late10To30, &row.LateOver30, &row.MaxDelay)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan daily_stats: %w", err)
+		}
+		stats = append(stats, row)
+	}
+	err = rows.Err()
+	if err != nil {
+		return nil, fmt.Errorf("failed to iterate daily_stats: %w", err)
+	}
+	return stats, nil
+}
+
+func (c *DBClient) SelectDailyWorstTrips(ctx context.Context, fromDay, toDay string) ([]DailyWorstTrip, error) {
+	db, err := sql.Open("libsql", c.dbConnectUrl)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+	defer db.Close()
+
+	rows, err := db.QueryContext(ctx, `
+		SELECT day, service_type, trip_id, COALESCE(train_number, 0), COALESCE(origin_station, ''),
+		       COALESCE(destination_station, ''), COALESCE(scheduled_arrival, ''), COALESCE(actual_arrival, ''),
+		       delay_minutes
+		FROM daily_worst_trips
+		WHERE day >= ? AND day <= ?;`, fromDay, toDay)
+	if err != nil {
+		return nil, fmt.Errorf("failed to select daily_worst_trips %s..%s: %w", fromDay, toDay, err)
+	}
+	defer rows.Close()
+
+	var trips []DailyWorstTrip
+	for rows.Next() {
+		var trip DailyWorstTrip
+		err := rows.Scan(&trip.Day, &trip.ServiceType, &trip.TripID, &trip.TrainNumber,
+			&trip.OriginStation, &trip.DestinationStation, &trip.ScheduledArrival, &trip.ActualArrival,
+			&trip.DelayMinutes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan daily_worst_trips: %w", err)
+		}
+		trips = append(trips, trip)
+	}
+	err = rows.Err()
+	if err != nil {
+		return nil, fmt.Errorf("failed to iterate daily_worst_trips: %w", err)
+	}
+	return trips, nil
 }
 
 func (c *DBClient) GetWorstlDelays(ctx context.Context, days int, limit int) ([]Trip, error) {

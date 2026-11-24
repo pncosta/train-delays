@@ -55,7 +55,10 @@ func withCORS(next http.Handler) http.Handler {
 
 func setupHandlers(ctx context.Context, env Env, dbClient *DBClient) (*http.ServeMux, error) {
 	h := &Handler{}
+	statsCache := newDayCache()
 	mux := &http.ServeMux{}
+	mux.HandleFunc("GET /api/stats/daily", h.handleDailyStats(dbClient, statsCache))
+	mux.HandleFunc("GET /api/stats/worst-trips", h.handleWorstTrips(dbClient, statsCache))
 	mux.HandleFunc("GET /api/stats/summary", h.handleSummary(ctx, "", dbClient))
 	mux.HandleFunc("GET /api/stats/worst", h.handleWorstDelays(ctx, "", dbClient))
 	mux.HandleFunc("GET /api/stats/cancellations", h.handleCancellations(ctx, "", dbClient))
