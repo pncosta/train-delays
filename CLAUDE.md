@@ -1,7 +1,21 @@
 # CLAUDE.md
 
+## communication
+End EVERY answer with a "## 80/20" section, placed last, with
+a line (---) above it. Bottom line only, nothing new.
+Show a line only when it has real content:
+📝 Prompt: always one line - Summary of what was prompted/asked
+✅ Result: always. One line.
+👉 Next: only if I must do something. Numbered, action in bold.
+❓ Decide: only if the choice is mine.
+⚠️ Watch out: only a real risk.
+🔀 Git: only if a repo changed.
+
+Bold the key actions, so the bold text alone is the answer.
+
 Guidance for Claude Code when working in this repo. Applies on top of (not instead of) the
 `/ideate` → `/implement` → `/review` skills in `.claude/skills/` and the agents in `.claude/agents/`.
+
 
 ## Workflow
 
@@ -26,6 +40,8 @@ Guidance for Claude Code when working in this repo. Applies on top of (not inste
     needs it.
   - The task-breakdown summary on the `BACKLOG.md` entry (see below) is often the fastest way to see
     the natural split — one line in it is frequently one PR, though not always.
+
+
 
 ## `/ideate`: add a task-breakdown summary
 
